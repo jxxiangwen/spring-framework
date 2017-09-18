@@ -131,6 +131,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	private ConversionService conversionService;
 
 	/** Custom PropertyEditorRegistrars to apply to the beans of this factory */
+	// 存储PropertyEditorRegistrar接口实现集合
 	private final Set<PropertyEditorRegistrar> propertyEditorRegistrars =
 			new LinkedHashSet<>(4);
 
@@ -142,9 +143,11 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			new HashMap<>(4);
 
 	/** String resolvers to apply e.g. to annotation attribute values */
+	// 存储StringValueResolver（字符串解析器）接口实现列表
 	private final List<StringValueResolver> embeddedValueResolvers = new LinkedList<>();
 
 	/** BeanPostProcessors to apply in createBean */
+	// 存储 BeanPostProcessor接口实现列表
 	private final List<BeanPostProcessor> beanPostProcessors = new ArrayList<>();
 
 	/** Indicates whether any InstantiationAwareBeanPostProcessors have been registered */
@@ -160,10 +163,12 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	private SecurityContextProvider securityContextProvider;
 
 	/** Map from bean name to merged RootBeanDefinition */
+	// 存储Bean名称->合并过的根Bean定义映射关系
 	private final Map<String, RootBeanDefinition> mergedBeanDefinitions =
 			new ConcurrentHashMap<>(256);
 
 	/** Names of beans that have already been created at least once */
+	// 存储至少被创建过一次的Bean名集合
 	private final Set<String> alreadyCreated =
 			Collections.newSetFromMap(new ConcurrentHashMap<String, Boolean>(256));
 
@@ -239,6 +244,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 		final String beanName = transformedBeanName(name);
 		Object bean;
 
+		// 检查一下本地的单例缓存是否已经加载过Bean，没有的话再检查earlySingleton缓存是否已经加载过Bean
 		// Eagerly check singleton cache for manually registered singletons.
 		Object sharedInstance = getSingleton(beanName);
 		if (sharedInstance != null && args == null) {
@@ -255,8 +261,11 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 		}
 
 		else {
+			// 一些基本的检查和简单的操作，包括bean是否是prototype的
+			// （prototype的Bean当前创建会抛出异常）、是否抽象的、将beanName加入alreadyCreated这个Set中等
 			// Fail if we're already creating this bean instance:
 			// We're assumably within a circular reference.
+            // 循环依赖
 			if (isPrototypeCurrentlyInCreation(beanName)) {
 				throw new BeanCurrentlyInCreationException(beanName);
 			}
@@ -285,6 +294,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				checkMergedBeanDefinition(mbd, beanName, args);
 
 				// Guarantee initialization of beans that the current bean depends on.
+                // 保证了depends-on依赖的Bean会优先于当前Bean被加载
 				String[] dependsOn = mbd.getDependsOn();
 				if (dependsOn != null) {
 					for (String dependsOnBean : dependsOn) {
@@ -299,10 +309,12 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 
 				// Create bean instance.
 				if (mbd.isSingleton()) {
+				    // 单例bean会想查找,没有才去创建
 					sharedInstance = getSingleton(beanName, new ObjectFactory<Object>() {
 						@Override
 						public Object getObject() throws BeansException {
 							try {
+							    // createBean方法是AbstractBeanFactory的子类AbstractAutowireCapableBeanFactory的一个方法
 								return createBean(beanName, mbd, args);
 							}
 							catch (BeansException ex) {
@@ -318,9 +330,11 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 				}
 
 				else if (mbd.isPrototype()) {
+				    // 原型bean会直接创建
 					// It's a prototype -> create a new instance.
 					Object prototypeInstance = null;
 					try {
+					    // 加入ThreadLocal,防止循环依赖
 						beforePrototypeCreation(beanName);
 						prototypeInstance = createBean(beanName, mbd, args);
 					}
@@ -1004,7 +1018,9 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	 */
 	@SuppressWarnings("unchecked")
 	protected void beforePrototypeCreation(String beanName) {
-		Object curVal = this.prototypesCurrentlyInCreation.get();
+	    // 这段主要是说bean在创建前要把当前beanName设置到ThreadLocal中去，
+        // 可以防止一些循环以来,比如已经处于正在创建了,又想创建
+        Object curVal = this.prototypesCurrentlyInCreation.get();
 		if (curVal == null) {
 			this.prototypesCurrentlyInCreation.set(beanName);
 		}
@@ -1028,6 +1044,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	 */
 	@SuppressWarnings("unchecked")
 	protected void afterPrototypeCreation(String beanName) {
+	    // 就是把当前bean移除一下，这样其它线程就可以创建bean了
 		Object curVal = this.prototypesCurrentlyInCreation.get();
 		if (curVal instanceof String) {
 			this.prototypesCurrentlyInCreation.remove();
@@ -1574,6 +1591,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			Object beanInstance, String name, String beanName, RootBeanDefinition mbd) {
 
 		// Don't let calling code try to dereference the factory if the bean isn't a factory.
+        // // 是否beanName以"&"开头并且不是FactoryBean的实现类，不满足则抛异常，因为beanName以"&"开头是FactoryBean的实现类bean定义的一个特征。
 		if (BeanFactoryUtils.isFactoryDereference(name) && !(beanInstance instanceof FactoryBean)) {
 			throw new BeanIsNotAFactoryException(transformedBeanName(name), beanInstance.getClass());
 		}
@@ -1581,6 +1599,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 		// Now we have the bean instance, which may be a normal bean or a FactoryBean.
 		// If it's a FactoryBean, we use it to create a bean instance, unless the
 		// caller actually wants a reference to the factory.
+        // bean不是FactoryBean的实现类或者beanName以"&"开头,都直接返回
 		if (!(beanInstance instanceof FactoryBean) || BeanFactoryUtils.isFactoryDereference(name)) {
 			return beanInstance;
 		}
@@ -1642,6 +1661,11 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	 */
 	protected void registerDisposableBeanIfNecessary(String beanName, Object bean, RootBeanDefinition mbd) {
 		AccessControlContext acc = (System.getSecurityManager() != null ? getAccessControlContext() : null);
+		// 必须不是prototype（原型）的，requiresDestruction方法的判断是否有destroy方法或者实现了DestructionAwareBeanPostProcessor
+        //（1）Bean是DisposableBean的实现类，此时执行DisposableBean的接口方法destroy()
+        //（2）Bean标签中有配置destroy-method属性，此时执行destroy-method配置指定的方法
+        //（3）当前Bean对应的BeanFactory中持有DestructionAwareBeanPostProcessor接口的实现类，
+        // 此时执行DestructionAwareBeanPostProcessor的接口方法postProcessBeforeDestruction
 		if (!mbd.isPrototype() && requiresDestruction(bean, mbd)) {
 			if (mbd.isSingleton()) {
 				// Register a DisposableBean implementation that performs all destruction

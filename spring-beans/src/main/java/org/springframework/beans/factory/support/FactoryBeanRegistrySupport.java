@@ -43,6 +43,7 @@ import org.springframework.beans.factory.FactoryBeanNotInitializedException;
 public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanRegistry {
 
 	/** Cache of singleton objects created by FactoryBeans: FactoryBean name --> object */
+	// 存储Bean名称->FactoryBean接口Bean实现映射关系
 	private final Map<String, Object> factoryBeanObjectCache = new ConcurrentHashMap<>(16);
 
 
@@ -96,6 +97,11 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 	 * @see org.springframework.beans.factory.FactoryBean#getObject()
 	 */
 	protected Object getObjectFromFactoryBean(FactoryBean<?> factory, String beanName, boolean shouldPostProcess) {
+		// 如果FactoryBean接口实现类的isSington方法返回的是true，
+		// 那么每次调用getObject方法的时候会优先尝试从FactoryBean对象缓存中取目标对象，
+		// 有就直接拿，没有就创建并放入FactoryBean对象缓存，这样保证了每次单例的FactoryBean调用
+		// getObject()方法后最终拿到的目标对象一定是单例的，即在内存中都是同一份
+		// 如果FactoryBean接口实现类的isSington方法返回的是false，那么每次调用getObject方法的时候都会新创建一个目标对象
 		if (factory.isSingleton() && containsSingleton(beanName)) {
 			synchronized (getSingletonMutex()) {
 				Object object = this.factoryBeanObjectCache.get(beanName);

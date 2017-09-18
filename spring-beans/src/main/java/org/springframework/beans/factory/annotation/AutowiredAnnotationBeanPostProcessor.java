@@ -114,6 +114,7 @@ import org.springframework.util.StringUtils;
  * @see Autowired
  * @see Value
  */
+// 解析使用了Autowired,Value等注解的field
 public class AutowiredAnnotationBeanPostProcessor extends InstantiationAwareBeanPostProcessorAdapter
 		implements MergedBeanDefinitionPostProcessor, PriorityOrdered, BeanFactoryAware {
 

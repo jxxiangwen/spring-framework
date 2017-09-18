@@ -237,6 +237,7 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 					"Nested property in path '" + propertyName + "' does not exist", ex);
 		}
 		PropertyTokenHolder tokens = getPropertyNameTokens(getFinalPath(nestedPa, propertyName));
+		// 设置property
 		nestedPa.setPropertyValue(tokens, new PropertyValue(propertyName, value));
 	}
 
@@ -301,6 +302,7 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 							"in indexed property path '" + propertyName + "': returned null");
 				}
 			}
+			// 根据不同的类型注入
 			if (propValue.getClass().isArray()) {
 				PropertyHandler ph = getLocalPropertyHandler(actualName);
 				Class<?> requiredType = propValue.getClass().getComponentType();
@@ -431,6 +433,7 @@ public abstract class AbstractNestablePropertyAccessor extends AbstractPropertyA
 					}
 					pv.getOriginalPropertyValue().conversionNecessary = (valueToApply != originalValue);
 				}
+				// 注入
 				ph.setValue(this.wrappedObject, valueToApply);
 			}
 			catch (TypeMismatchException ex) {

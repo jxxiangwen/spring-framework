@@ -149,6 +149,8 @@ public interface ConfigurableApplicationContext extends ApplicationContext, Life
 	 * @throws IllegalStateException if already initialized and multiple refresh
 	 * attempts are not supported
 	 */
+	// 从xml或其他资源文件加载配置,startup调用,如果失败要destroy所有单例
+    // 也就是要么单例全部成功或者一个都不成功
 	void refresh() throws BeansException, IllegalStateException;
 
 	/**
