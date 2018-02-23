@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,54 +16,51 @@
 
 package org.springframework.core.codec;
 
+import java.util.Map;
+
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 
 import org.springframework.core.ResolvableType;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
+import org.springframework.lang.Nullable;
 import org.springframework.util.MimeType;
 
 /**
- * Abstract base class for {@link org.springframework.core.codec.Encoder} classes that
- * can only deal with a single value.
+ * Abstract base class for {@link org.springframework.core.codec.Encoder}
+ * classes that can only deal with a single value.
+ *
  * @author Arjen Poutsma
  * @since 5.0
  */
 public abstract class AbstractSingleValueEncoder<T> extends AbstractEncoder<T> {
 
+
 	public AbstractSingleValueEncoder(MimeType... supportedMimeTypes) {
 		super(supportedMimeTypes);
 	}
 
+
 	@Override
-	public final Flux<DataBuffer> encode(Publisher<? extends T> inputStream,
-			DataBufferFactory bufferFactory, ResolvableType elementType, MimeType mimeType,
-			Object... hints) {
+	public final Flux<DataBuffer> encode(Publisher<? extends T> inputStream, DataBufferFactory bufferFactory,
+			ResolvableType elementType, @Nullable MimeType mimeType, @Nullable Map<String, Object> hints) {
+
 		return Flux.from(inputStream).
 				take(1).
-				concatMap(t -> {
-					try {
-						return encode(t, bufferFactory, elementType, mimeType);
-					}
-					catch (Exception ex) {
-						return Flux.error(ex);
-					}
-				});
+				concatMap(t -> encode(t, bufferFactory, elementType, mimeType, hints));
 	}
 
 	/**
-	 * Encodes {@code T} to an output {@link DataBuffer} stream.
+	 * Encode {@code T} to an output {@link DataBuffer} stream.
 	 * @param t the value to process
 	 * @param dataBufferFactory a buffer factory used to create the output
 	 * @param type the stream element type to process
 	 * @param mimeType the mime type to process
 	 * @param hints Additional information about how to do decode, optional
 	 * @return the output stream
-	 * @throws Exception in case of errors
 	 */
 	protected abstract Flux<DataBuffer> encode(T t, DataBufferFactory dataBufferFactory,
-			ResolvableType type, MimeType mimeType, Object... hints) throws Exception;
-
+			ResolvableType type, @Nullable MimeType mimeType, @Nullable Map<String, Object> hints);
 
 }

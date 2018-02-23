@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,24 +17,32 @@
 package org.springframework.http.server.reactive;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
+import java.security.cert.X509Certificate;
 import java.util.Enumeration;
 import java.util.Map;
+import javax.servlet.AsyncContext;
+import javax.servlet.AsyncEvent;
+import javax.servlet.AsyncListener;
 import javax.servlet.ReadListener;
 import javax.servlet.ServletInputStream;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletRequest;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import reactor.core.publisher.Flux;
 
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.LinkedCaseInsensitiveMap;
 import org.springframework.util.LinkedMultiValueMap;
@@ -43,72 +51,88 @@ import org.springframework.util.StringUtils;
 
 /**
  * Adapt {@link ServerHttpRequest} to the Servlet {@link HttpServletRequest}.
+ *
  * @author Rossen Stoyanchev
  * @since 5.0
  */
-public class ServletServerHttpRequest extends AbstractServerHttpRequest {
+class ServletServerHttpRequest extends AbstractServerHttpRequest {
 
-	private final Object bodyPublisherMonitor = new Object();
+	private static final String X509_CERTIFICATE_ATTRIBUTE = "javax.servlet.request.X509Certificate";
 
-	private volatile RequestBodyPublisher bodyPublisher;
+	private static final String SSL_SESSION_ID_ATTRIBUTE = "javax.servlet.request.ssl_session_id";
+
+	static final DataBuffer EOF_BUFFER = new DefaultDataBufferFactory().allocateBuffer(0);
+
+
+	protected final Log logger = LogFactory.getLog(getClass());
+
 
 	private final HttpServletRequest request;
 
-	private final DataBufferFactory dataBufferFactory;
+	private final RequestBodyPublisher bodyPublisher;
 
-	private final int bufferSize;
+	private final Object cookieLock = new Object();
 
-	public ServletServerHttpRequest(HttpServletRequest request,
-			DataBufferFactory dataBufferFactory, int bufferSize) {
-		Assert.notNull(request, "'request' must not be null.");
-		Assert.notNull(dataBufferFactory, "'dataBufferFactory' must not be null");
-		Assert.isTrue(bufferSize > 0);
+	private final DataBufferFactory bufferFactory;
+
+	private final byte[] buffer;
+
+
+	public ServletServerHttpRequest(HttpServletRequest request, AsyncContext asyncContext,
+			String servletPath, DataBufferFactory bufferFactory, int bufferSize) throws IOException {
+
+		super(initUri(request), request.getContextPath() + servletPath, initHeaders(request));
+
+		Assert.notNull(bufferFactory, "'bufferFactory' must not be null");
+		Assert.isTrue(bufferSize > 0, "'bufferSize' must be higher than 0");
 
 		this.request = request;
-		this.dataBufferFactory = dataBufferFactory;
-		this.bufferSize = bufferSize;
+		this.bufferFactory = bufferFactory;
+		this.buffer = new byte[bufferSize];
+
+		asyncContext.addListener(new RequestAsyncListener());
+
+		// Tomcat expects ReadListener registration on initial thread
+		ServletInputStream inputStream = request.getInputStream();
+		this.bodyPublisher = new RequestBodyPublisher(inputStream);
+		this.bodyPublisher.registerReadListener();
 	}
 
-	public HttpServletRequest getServletRequest() {
-		return this.request;
-	}
-
-	@Override
-	public HttpMethod getMethod() {
-		return HttpMethod.valueOf(getServletRequest().getMethod());
-	}
-
-	@Override
-	protected URI initUri() throws URISyntaxException {
-		StringBuffer url = this.request.getRequestURL();
-		String query = this.request.getQueryString();
-		if (StringUtils.hasText(query)) {
-			url.append('?').append(query);
+	private static URI initUri(HttpServletRequest request) {
+		Assert.notNull(request, "'request' must not be null");
+		try {
+			StringBuffer url = request.getRequestURL();
+			String query = request.getQueryString();
+			if (StringUtils.hasText(query)) {
+				url.append('?').append(query);
+			}
+			return new URI(url.toString());
 		}
-		return new URI(url.toString());
+		catch (URISyntaxException ex) {
+			throw new IllegalStateException("Could not get URI: " + ex.getMessage(), ex);
+		}
 	}
 
-	@Override
-	protected HttpHeaders initHeaders() {
+	private static HttpHeaders initHeaders(HttpServletRequest request) {
 		HttpHeaders headers = new HttpHeaders();
-		for (Enumeration<?> names = getServletRequest().getHeaderNames();
-		     names.hasMoreElements(); ) {
+		for (Enumeration<?> names = request.getHeaderNames();
+			 names.hasMoreElements(); ) {
 			String name = (String) names.nextElement();
-			for (Enumeration<?> values = getServletRequest().getHeaders(name);
-			     values.hasMoreElements(); ) {
+			for (Enumeration<?> values = request.getHeaders(name);
+				 values.hasMoreElements(); ) {
 				headers.add(name, (String) values.nextElement());
 			}
 		}
 		MediaType contentType = headers.getContentType();
 		if (contentType == null) {
-			String requestContentType = getServletRequest().getContentType();
+			String requestContentType = request.getContentType();
 			if (StringUtils.hasLength(requestContentType)) {
 				contentType = MediaType.parseMediaType(requestContentType);
 				headers.setContentType(contentType);
 			}
 		}
 		if (contentType != null && contentType.getCharset() == null) {
-			String encoding = getServletRequest().getCharacterEncoding();
+			String encoding = request.getCharacterEncoding();
 			if (StringUtils.hasLength(encoding)) {
 				Charset charset = Charset.forName(encoding);
 				Map<String, String> params = new LinkedCaseInsensitiveMap<>();
@@ -120,7 +144,7 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 			}
 		}
 		if (headers.getContentLength() == -1) {
-			int contentLength = getServletRequest().getContentLength();
+			int contentLength = request.getContentLength();
 			if (contentLength != -1) {
 				headers.setContentLength(contentLength);
 			}
@@ -128,10 +152,19 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 		return headers;
 	}
 
+
+	@Override
+	public String getMethodValue() {
+		return this.request.getMethod();
+	}
+
 	@Override
 	protected MultiValueMap<String, HttpCookie> initCookies() {
 		MultiValueMap<String, HttpCookie> httpCookies = new LinkedMultiValueMap<>();
-		Cookie[] cookies = this.request.getCookies();
+		Cookie[] cookies;
+		synchronized (this.cookieLock) {
+			cookies = this.request.getCookies();
+		}
 		if (cookies != null) {
 			for (Cookie cookie : cookies) {
 				String name = cookie.getName();
@@ -143,52 +176,89 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 	}
 
 	@Override
+	public InetSocketAddress getRemoteAddress() {
+		return new InetSocketAddress(this.request.getRemoteHost(), this.request.getRemotePort());
+	}
+
+	@Nullable
+	protected SslInfo initSslInfo() {
+		if (!this.request.isSecure()) {
+			return null;
+		}
+		return new DefaultSslInfo(
+				(String) request.getAttribute(SSL_SESSION_ID_ATTRIBUTE),
+				(X509Certificate[]) request.getAttribute(X509_CERTIFICATE_ATTRIBUTE));
+	}
+
+	@Override
 	public Flux<DataBuffer> getBody() {
-		try {
-			RequestBodyPublisher bodyPublisher = this.bodyPublisher;
-			if (bodyPublisher == null) {
-				synchronized (this.bodyPublisherMonitor) {
-					bodyPublisher = this.bodyPublisher;
-					if (bodyPublisher == null) {
-						this.bodyPublisher = bodyPublisher = createBodyPublisher();
-					}
-				}
-			}
-			return Flux.from(bodyPublisher);
+		return Flux.from(this.bodyPublisher);
+	}
+
+	/**
+	 * Read from the request body InputStream and return a DataBuffer.
+	 * Invoked only when {@link ServletInputStream#isReady()} returns "true".
+	 */
+	@Nullable
+	DataBuffer readFromInputStream() throws IOException {
+		int read = this.request.getInputStream().read(this.buffer);
+		if (logger.isTraceEnabled()) {
+			logger.trace("InputStream read returned " + read + (read != -1 ? " bytes" : ""));
 		}
-		catch (IOException ex) {
-			return Flux.error(ex);
+
+		if (read > 0) {
+			DataBuffer dataBuffer = this.bufferFactory.allocateBuffer(read);
+			dataBuffer.write(this.buffer, 0, read);
+			return dataBuffer;
+		}
+		else if (read == -1) {
+			return EOF_BUFFER;
+		}
+
+		return null;
+	}
+
+	@SuppressWarnings("unchecked")
+	@Override
+	public <T> T getNativeRequest() {
+		return (T) this.request;
+	}
+
+
+	private final class RequestAsyncListener implements AsyncListener {
+
+		@Override
+		public void onStartAsync(AsyncEvent event) {}
+
+		@Override
+		public void onTimeout(AsyncEvent event) {
+			Throwable ex = event.getThrowable();
+			ex = ex != null ? ex : new IllegalStateException("Async operation timeout.");
+			bodyPublisher.onError(ex);
+		}
+
+		@Override
+		public void onError(AsyncEvent event) {
+			bodyPublisher.onError(event.getThrowable());
+		}
+
+		@Override
+		public void onComplete(AsyncEvent event) {
+			bodyPublisher.onAllDataRead();
 		}
 	}
 
-	private RequestBodyPublisher createBodyPublisher() throws IOException {
-		RequestBodyPublisher bodyPublisher =
-				new RequestBodyPublisher(request.getInputStream(), this.dataBufferFactory,
-						this.bufferSize);
-		bodyPublisher.registerListener();
-		return bodyPublisher;
-	}
 
-	private static class RequestBodyPublisher extends AbstractRequestBodyPublisher {
-
-		private final RequestBodyPublisher.RequestBodyReadListener readListener =
-				new RequestBodyPublisher.RequestBodyReadListener();
+	private class RequestBodyPublisher extends AbstractListenerReadPublisher<DataBuffer> {
 
 		private final ServletInputStream inputStream;
 
-		private final DataBufferFactory dataBufferFactory;
-
-		private final byte[] buffer;
-
-		public RequestBodyPublisher(ServletInputStream inputStream,
-				DataBufferFactory dataBufferFactory, int bufferSize) {
+		public RequestBodyPublisher(ServletInputStream inputStream) {
 			this.inputStream = inputStream;
-			this.dataBufferFactory = dataBufferFactory;
-			this.buffer = new byte[bufferSize];
 		}
 
-		public void registerListener() throws IOException {
-			this.inputStream.setReadListener(this.readListener);
+		public void registerReadListener() throws IOException {
+			this.inputStream.setReadListener(new RequestBodyPublisherReadListener());
 		}
 
 		@Override
@@ -199,23 +269,28 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 		}
 
 		@Override
+		@Nullable
 		protected DataBuffer read() throws IOException {
 			if (this.inputStream.isReady()) {
-				int read = this.inputStream.read(this.buffer);
-				if (logger.isTraceEnabled()) {
-					logger.trace("read:" + read);
-				}
-
-				if (read > 0) {
-					DataBuffer dataBuffer = this.dataBufferFactory.allocateBuffer(read);
-					dataBuffer.write(this.buffer, 0, read);
+				DataBuffer dataBuffer = readFromInputStream();
+				if (dataBuffer != EOF_BUFFER) {
 					return dataBuffer;
+				}
+				else {
+					// No need to wait for container callback...
+					onAllDataRead();
 				}
 			}
 			return null;
 		}
 
-		private class RequestBodyReadListener implements ReadListener {
+		@Override
+		protected void readingPaused() {
+			// no-op
+		}
+
+
+		private class RequestBodyPublisherReadListener implements ReadListener {
 
 			@Override
 			public void onDataAvailable() throws IOException {
@@ -234,4 +309,5 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 			}
 		}
 	}
+
 }

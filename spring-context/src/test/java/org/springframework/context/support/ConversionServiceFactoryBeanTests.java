@@ -31,6 +31,7 @@ import org.springframework.core.convert.converter.ConverterFactory;
 import org.springframework.core.convert.converter.GenericConverter;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.lang.Nullable;
 import org.springframework.tests.sample.beans.ResourceTestBean;
 
 import static org.hamcrest.Matchers.*;
@@ -78,7 +79,8 @@ public class ConversionServiceFactoryBeanTests {
 				return Collections.singleton(new ConvertiblePair(String.class, Baz.class));
 			}
 			@Override
-			public Object convert(Object source, TypeDescriptor sourceType, TypeDescriptor targetType) {
+			@Nullable
+			public Object convert(@Nullable Object source, TypeDescriptor sourceType, TypeDescriptor targetType) {
 				return new Baz();
 			}
 		});
@@ -91,7 +93,7 @@ public class ConversionServiceFactoryBeanTests {
 		assertTrue(service.canConvert(String.class, Baz.class));
 	}
 
-	@Test(expected=IllegalArgumentException.class)
+	@Test(expected = IllegalArgumentException.class)
 	public void createDefaultConversionServiceWithInvalidSupplements() {
 		ConversionServiceFactoryBean factory = new ConversionServiceFactoryBean();
 		Set<Object> converters = new HashSet<>();

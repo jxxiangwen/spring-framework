@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ import org.hibernate.boot.MetadataSources;
 import org.hibernate.boot.registry.BootstrapServiceRegistryBuilder;
 import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.cfg.Configuration;
-import org.hibernate.cfg.Environment;
+import org.hibernate.context.spi.CurrentTenantIdentifierResolver;
 import org.hibernate.engine.jdbc.connections.spi.MultiTenantConnectionProvider;
 import org.hibernate.engine.spi.SessionFactoryImplementor;
 
@@ -58,6 +58,7 @@ import org.springframework.core.type.classreading.MetadataReader;
 import org.springframework.core.type.classreading.MetadataReaderFactory;
 import org.springframework.core.type.filter.AnnotationTypeFilter;
 import org.springframework.core.type.filter.TypeFilter;
+import org.springframework.lang.Nullable;
 import org.springframework.transaction.jta.JtaTransactionManager;
 import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
@@ -93,6 +94,7 @@ public class LocalSessionFactoryBuilder extends Configuration {
 
 	private final ResourcePatternResolver resourcePatternResolver;
 
+	@Nullable
 	private TypeFilter[] entityTypeFilters = DEFAULT_ENTITY_TYPE_FILTERS;
 
 
@@ -101,7 +103,7 @@ public class LocalSessionFactoryBuilder extends Configuration {
 	 * @param dataSource the JDBC DataSource that the resulting Hibernate SessionFactory should be using
 	 * (may be {@code null})
 	 */
-	public LocalSessionFactoryBuilder(DataSource dataSource) {
+	public LocalSessionFactoryBuilder(@Nullable DataSource dataSource) {
 		this(dataSource, new PathMatchingResourcePatternResolver());
 	}
 
@@ -111,7 +113,7 @@ public class LocalSessionFactoryBuilder extends Configuration {
 	 * (may be {@code null})
 	 * @param classLoader the ClassLoader to load application classes from
 	 */
-	public LocalSessionFactoryBuilder(DataSource dataSource, ClassLoader classLoader) {
+	public LocalSessionFactoryBuilder(@Nullable DataSource dataSource, ClassLoader classLoader) {
 		this(dataSource, new PathMatchingResourcePatternResolver(classLoader));
 	}
 
@@ -121,7 +123,7 @@ public class LocalSessionFactoryBuilder extends Configuration {
 	 * (may be {@code null})
 	 * @param resourceLoader the ResourceLoader to load application classes from
 	 */
-	public LocalSessionFactoryBuilder(DataSource dataSource, ResourceLoader resourceLoader) {
+	public LocalSessionFactoryBuilder(@Nullable DataSource dataSource, ResourceLoader resourceLoader) {
 		this(dataSource, resourceLoader, new MetadataSources(
 				new BootstrapServiceRegistryBuilder().applyClassLoader(resourceLoader.getClassLoader()).build()));
 	}
@@ -134,16 +136,30 @@ public class LocalSessionFactoryBuilder extends Configuration {
 	 * @param metadataSources the Hibernate MetadataSources service to use (e.g. reusing an existing one)
 	 * @since 4.3
 	 */
-	public LocalSessionFactoryBuilder(DataSource dataSource, ResourceLoader resourceLoader, MetadataSources metadataSources) {
+	public LocalSessionFactoryBuilder(@Nullable DataSource dataSource, ResourceLoader resourceLoader, MetadataSources metadataSources) {
 		super(metadataSources);
 
-		getProperties().put(Environment.CURRENT_SESSION_CONTEXT_CLASS, SpringSessionContext.class.getName());
+		getProperties().put(AvailableSettings.CURRENT_SESSION_CONTEXT_CLASS, SpringSessionContext.class.getName());
 		if (dataSource != null) {
-			getProperties().put(Environment.DATASOURCE, dataSource);
+			getProperties().put(AvailableSettings.DATASOURCE, dataSource);
 		}
 
-		// Hibernate 5.2: manually enforce connection release mode ON_CLOSE (the former default)
-		getProperties().put("hibernate.connection.handling_mode", "DELAYED_ACQUISITION_AND_HOLD");
+		// Hibernate 5.1/5.2: manually enforce connection release mode ON_CLOSE (the former default)
+		try {
+			// Try Hibernate 5.2
+			AvailableSettings.class.getField("CONNECTION_HANDLING");
+			getProperties().put("hibernate.connection.handling_mode", "DELAYED_ACQUISITION_AND_HOLD");
+		}
+		catch (NoSuchFieldException ex) {
+			// Try Hibernate 5.1
+			try {
+				AvailableSettings.class.getField("ACQUIRE_CONNECTIONS");
+				getProperties().put("hibernate.connection.release_mode", "ON_CLOSE");
+			}
+			catch (NoSuchFieldException ex2) {
+				// on Hibernate 5.0.x or lower - no need to change the default there
+			}
+		}
 
 		getProperties().put(AvailableSettings.CLASSLOADERS, Collections.singleton(resourceLoader.getClassLoader()));
 		this.resourcePatternResolver = ResourcePatternUtils.getResourcePatternResolver(resourceLoader);
@@ -190,8 +206,22 @@ public class LocalSessionFactoryBuilder extends Configuration {
 					"Unknown transaction manager type: " + jtaTransactionManager.getClass().getName());
 		}
 
-		// Hibernate 5.2: manually enforce connection release mode AFTER_STATEMENT (the JTA default)
-		getProperties().put("hibernate.connection.handling_mode", "DELAYED_ACQUISITION_AND_RELEASE_AFTER_STATEMENT");
+		// Hibernate 5.1/5.2: manually enforce connection release mode AFTER_STATEMENT (the JTA default)
+		try {
+			// Try Hibernate 5.2
+			AvailableSettings.class.getField("CONNECTION_HANDLING");
+			getProperties().put("hibernate.connection.handling_mode", "DELAYED_ACQUISITION_AND_RELEASE_AFTER_STATEMENT");
+		}
+		catch (NoSuchFieldException ex) {
+			// Try Hibernate 5.1
+			try {
+				AvailableSettings.class.getField("ACQUIRE_CONNECTIONS");
+				getProperties().put("hibernate.connection.release_mode", "AFTER_STATEMENT");
+			}
+			catch (NoSuchFieldException ex2) {
+				// on Hibernate 5.0.x or lower - no need to change the default there
+			}
+		}
 
 		return this;
 	}
@@ -204,6 +234,17 @@ public class LocalSessionFactoryBuilder extends Configuration {
 	public LocalSessionFactoryBuilder setMultiTenantConnectionProvider(MultiTenantConnectionProvider multiTenantConnectionProvider) {
 		getProperties().put(AvailableSettings.MULTI_TENANT_CONNECTION_PROVIDER, multiTenantConnectionProvider);
 		return this;
+	}
+
+	/**
+	 * Overridden to reliably pass a {@link CurrentTenantIdentifierResolver} to the SessionFactory.
+	 * @since 4.3.2
+	 * @see AvailableSettings#MULTI_TENANT_IDENTIFIER_RESOLVER
+	 */
+	@Override
+	public void setCurrentTenantIdentifierResolver(CurrentTenantIdentifierResolver currentTenantIdentifierResolver) {
+		getProperties().put(AvailableSettings.MULTI_TENANT_IDENTIFIER_RESOLVER, currentTenantIdentifierResolver);
+		super.setCurrentTenantIdentifierResolver(currentTenantIdentifierResolver);
 	}
 
 	/**
@@ -282,10 +323,10 @@ public class LocalSessionFactoryBuilder extends Configuration {
 		try {
 			ClassLoader cl = this.resourcePatternResolver.getClassLoader();
 			for (String className : entityClassNames) {
-				addAnnotatedClass(cl.loadClass(className));
+				addAnnotatedClass(ClassUtils.forName(className, cl));
 			}
 			for (String className : converterClassNames) {
-				addAttributeConverter((Class<? extends AttributeConverter<?, ?>>) cl.loadClass(className));
+				addAttributeConverter((Class<? extends AttributeConverter<?, ?>>) ClassUtils.forName(className, cl));
 			}
 			for (String packageName : packageNames) {
 				addPackage(packageName);
@@ -344,12 +385,8 @@ public class LocalSessionFactoryBuilder extends Configuration {
 		private final Future<SessionFactory> sessionFactoryFuture;
 
 		public BootstrapSessionFactoryInvocationHandler(AsyncTaskExecutor bootstrapExecutor) {
-			this.sessionFactoryFuture = bootstrapExecutor.submit(new Callable<SessionFactory>() {
-				@Override
-				public SessionFactory call() throws Exception {
-					return buildSessionFactory();
-				}
-			});
+			this.sessionFactoryFuture = bootstrapExecutor.submit(
+					(Callable<SessionFactory>) LocalSessionFactoryBuilder.this::buildSessionFactory);
 		}
 
 		@Override
@@ -384,8 +421,8 @@ public class LocalSessionFactoryBuilder extends Configuration {
 				return this.sessionFactoryFuture.get();
 			}
 			catch (InterruptedException ex) {
-				throw new IllegalStateException("Interrupted during initialization of Hibernate SessionFactory: " +
-						ex.getMessage());
+				Thread.currentThread().interrupt();
+				throw new IllegalStateException("Interrupted during initialization of Hibernate SessionFactory", ex);
 			}
 			catch (ExecutionException ex) {
 				throw new IllegalStateException("Failed to asynchronously initialize Hibernate SessionFactory: " +

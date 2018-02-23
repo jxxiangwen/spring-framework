@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 		}
 		catch (NoSuchMethodException ex) {
 			// Should never happen
-			throw new IllegalStateException("No handler for HTTP OPTIONS", ex);
+			throw new IllegalStateException("Failed to retrieve internal handler method for HTTP OPTIONS", ex);
 		}
 	}
 
@@ -99,12 +99,7 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 	 */
 	@Override
 	protected Comparator<RequestMappingInfo> getMappingComparator(final HttpServletRequest request) {
-		return new Comparator<RequestMappingInfo>() {
-			@Override
-			public int compare(RequestMappingInfo info1, RequestMappingInfo info2) {
-				return info1.compareTo(info2, request);
-			}
-		};
+		return (info1, info2) -> info1.compareTo(info2, request);
 	}
 
 	/**
@@ -183,7 +178,6 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 	/**
 	 * Iterate all RequestMappingInfo's once again, look if any match by URL at
 	 * least and raise exceptions according to what doesn't match.
-	 *
 	 * @throws HttpRequestMethodNotSupportedException if there are matches by URL
 	 * but not by HTTP method
 	 * @throws HttpMediaTypeNotAcceptableException if there are matches by URL
@@ -243,7 +237,6 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 
 		private final List<PartialMatch> partialMatches = new ArrayList<>();
 
-
 		public PartialMatchHelper(Set<RequestMappingInfo> infos, HttpServletRequest request) {
 			for (RequestMappingInfo info : infos) {
 				if (info.getPatternsCondition().getMatchingCondition(request) != null) {
@@ -251,7 +244,6 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 				}
 			}
 		}
-
 
 		/**
 		 * Whether there any partial matches.
@@ -387,19 +379,17 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 
 			private final boolean paramsMatch;
 
-
 			/**
 			 * @param info RequestMappingInfo that matches the URL path.
 			 * @param request the current request
 			 */
 			public PartialMatch(RequestMappingInfo info, HttpServletRequest request) {
 				this.info = info;
-				this.methodsMatch = info.getMethodsCondition().getMatchingCondition(request) != null;
-				this.consumesMatch = info.getConsumesCondition().getMatchingCondition(request) != null;
-				this.producesMatch = info.getProducesCondition().getMatchingCondition(request) != null;
-				this.paramsMatch = info.getParamsCondition().getMatchingCondition(request) != null;
+				this.methodsMatch = (info.getMethodsCondition().getMatchingCondition(request) != null);
+				this.consumesMatch = (info.getConsumesCondition().getMatchingCondition(request) != null);
+				this.producesMatch = (info.getProducesCondition().getMatchingCondition(request) != null);
+				this.paramsMatch = (info.getParamsCondition().getMatchingCondition(request) != null);
 			}
-
 
 			public RequestMappingInfo getInfo() {
 				return this.info;
@@ -410,15 +400,15 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 			}
 
 			public boolean hasConsumesMatch() {
-				return hasMethodsMatch() && this.consumesMatch;
+				return (hasMethodsMatch() && this.consumesMatch);
 			}
 
 			public boolean hasProducesMatch() {
-				return hasConsumesMatch() && this.producesMatch;
+				return (hasConsumesMatch() && this.producesMatch);
 			}
 
 			public boolean hasParamsMatch() {
-				return hasProducesMatch() && this.paramsMatch;
+				return (hasProducesMatch() && this.paramsMatch);
 			}
 
 			@Override
@@ -428,13 +418,13 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 		}
 	}
 
+
 	/**
 	 * Default handler for HTTP OPTIONS.
 	 */
 	private static class HttpOptionsHandler {
 
 		private final HttpHeaders headers = new HttpHeaders();
-
 
 		public HttpOptionsHandler(Set<String> declaredMethods) {
 			this.headers.setAllow(initAllowedHttpMethods(declaredMethods));
@@ -444,16 +434,16 @@ public abstract class RequestMappingInfoHandlerMapping extends AbstractHandlerMe
 			Set<HttpMethod> result = new LinkedHashSet<>(declaredMethods.size());
 			if (declaredMethods.isEmpty()) {
 				for (HttpMethod method : HttpMethod.values()) {
-					if (!HttpMethod.TRACE.equals(method)) {
+					if (method != HttpMethod.TRACE) {
 						result.add(method);
 					}
 				}
 			}
 			else {
-				boolean hasHead = declaredMethods.contains("HEAD");
 				for (String method : declaredMethods) {
-					result.add(HttpMethod.valueOf(method));
-					if (!hasHead && "GET".equals(method)) {
+					HttpMethod httpMethod = HttpMethod.valueOf(method);
+					result.add(httpMethod);
+					if (httpMethod == HttpMethod.GET) {
 						result.add(HttpMethod.HEAD);
 					}
 				}

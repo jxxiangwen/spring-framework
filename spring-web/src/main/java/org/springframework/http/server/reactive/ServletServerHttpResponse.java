@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,93 +21,84 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
+import javax.servlet.AsyncContext;
+import javax.servlet.AsyncEvent;
+import javax.servlet.AsyncListener;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.WriteListener;
 import javax.servlet.http.Cookie;
 import javax.servlet.http.HttpServletResponse;
 
+import org.reactivestreams.Processor;
 import org.reactivestreams.Publisher;
-import reactor.core.publisher.Mono;
 
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
-import org.springframework.http.HttpStatus;
+import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 
 /**
  * Adapt {@link ServerHttpResponse} to the Servlet {@link HttpServletResponse}.
+ *
  * @author Rossen Stoyanchev
  * @since 5.0
  */
-public class ServletServerHttpResponse extends AbstractServerHttpResponse {
-
-	private final Object bodyProcessorMonitor = new Object();
-
-	private volatile ResponseBodyProcessor bodyProcessor;
+class ServletServerHttpResponse extends AbstractListenerServerHttpResponse {
 
 	private final HttpServletResponse response;
 
+	private final ServletOutputStream outputStream;
+
 	private final int bufferSize;
 
-	public ServletServerHttpResponse(HttpServletResponse response,
-			DataBufferFactory dataBufferFactory, int bufferSize) throws IOException {
-		super(dataBufferFactory);
-		Assert.notNull(response, "'response' must not be null");
-		Assert.notNull(dataBufferFactory, "'dataBufferFactory' must not be null");
-		Assert.isTrue(bufferSize > 0);
+	@Nullable
+	private volatile ResponseBodyFlushProcessor bodyFlushProcessor;
+
+	@Nullable
+	private volatile ResponseBodyProcessor bodyProcessor;
+
+	private volatile boolean flushOnNext;
+
+
+	public ServletServerHttpResponse(HttpServletResponse response, AsyncContext asyncContext,
+			DataBufferFactory bufferFactory, int bufferSize) throws IOException {
+
+		super(bufferFactory);
+
+		Assert.notNull(response, "HttpServletResponse must not be null");
+		Assert.notNull(bufferFactory, "DataBufferFactory must not be null");
+		Assert.isTrue(bufferSize > 0, "Buffer size must be greater than 0");
 
 		this.response = response;
+		this.outputStream = response.getOutputStream();
 		this.bufferSize = bufferSize;
+
+		asyncContext.addListener(new ResponseAsyncListener());
+
+		// Tomcat expects WriteListener registration on initial thread
+		response.getOutputStream().setWriteListener(new ResponseBodyWriteListener());
 	}
 
-	public HttpServletResponse getServletResponse() {
-		return this.response;
+
+	@SuppressWarnings("unchecked")
+	@Override
+	public <T> T getNativeResponse() {
+		return (T) this.response;
 	}
 
 	@Override
-	protected void writeStatusCode() {
-		HttpStatus statusCode = this.getStatusCode();
+	protected void applyStatusCode() {
+		Integer statusCode = getStatusCodeValue();
 		if (statusCode != null) {
-			getServletResponse().setStatus(statusCode.value());
+			this.response.setStatus(statusCode);
 		}
 	}
 
 	@Override
-	protected Mono<Void> writeWithInternal(Publisher<DataBuffer> publisher) {
-		Assert.state(this.bodyProcessor == null,
-				"Response body publisher is already provided");
-		try {
-			synchronized (this.bodyProcessorMonitor) {
-				if (this.bodyProcessor == null) {
-					this.bodyProcessor = createBodyProcessor();
-				}
-				else {
-					throw new IllegalStateException(
-							"Response body publisher is already provided");
-				}
-			}
-			return Mono.from(subscriber -> {
-				publisher.subscribe(this.bodyProcessor);
-				this.bodyProcessor.subscribe(subscriber);
-			});
-		}
-		catch (IOException ex) {
-			return Mono.error(ex);
-		}
-	}
-
-	private ResponseBodyProcessor createBodyProcessor() throws IOException {
-		ResponseBodyProcessor bodyProcessor =
-				new ResponseBodyProcessor(this.response.getOutputStream(),
-						this.bufferSize);
-		bodyProcessor.registerListener();
-		return bodyProcessor;
-	}
-
-	@Override
-	protected void writeHeaders() {
+	protected void applyHeaders() {
 		for (Map.Entry<String, List<String>> entry : getHeaders().entrySet()) {
 			String headerName = entry.getKey();
 			for (String headerValue : entry.getValue()) {
@@ -125,15 +116,19 @@ public class ServletServerHttpResponse extends AbstractServerHttpResponse {
 	}
 
 	@Override
-	protected void writeCookies() {
+	protected void applyCookies() {
 		for (String name : getCookies().keySet()) {
 			for (ResponseCookie httpCookie : getCookies().get(name)) {
 				Cookie cookie = new Cookie(name, httpCookie.getValue());
 				if (!httpCookie.getMaxAge().isNegative()) {
 					cookie.setMaxAge((int) httpCookie.getMaxAge().getSeconds());
 				}
-				httpCookie.getDomain().ifPresent(cookie::setDomain);
-				httpCookie.getPath().ifPresent(cookie::setPath);
+				if (httpCookie.getDomain() != null) {
+					cookie.setDomain(httpCookie.getDomain());
+				}
+				if (httpCookie.getPath() != null) {
+					cookie.setPath(httpCookie.getPath());
+				}
 				cookie.setSecure(httpCookie.isSecure());
 				cookie.setHttpOnly(httpCookie.isHttpOnly());
 				this.response.addCookie(cookie);
@@ -141,98 +136,210 @@ public class ServletServerHttpResponse extends AbstractServerHttpResponse {
 		}
 	}
 
-	private static class ResponseBodyProcessor extends AbstractResponseBodyProcessor {
+	@Override
+	protected Processor<? super Publisher<? extends DataBuffer>, Void> createBodyFlushProcessor() {
+		ResponseBodyFlushProcessor processor = new ResponseBodyFlushProcessor();
+		this.bodyFlushProcessor = processor;
+		return processor;
+	}
 
-		private final ResponseBodyWriteListener writeListener =
-				new ResponseBodyWriteListener();
-
-		private final ServletOutputStream outputStream;
-
-		private final int bufferSize;
-
-		private volatile boolean flushOnNext;
-
-		public ResponseBodyProcessor(ServletOutputStream outputStream, int bufferSize) {
-			this.outputStream = outputStream;
-			this.bufferSize = bufferSize;
+	/**
+	 * Write the DataBuffer to the response body OutputStream.
+	 * Invoked only when {@link ServletOutputStream#isReady()} returns "true"
+	 * and the readable bytes in the DataBuffer is greater than 0.
+	 * @return the number of bytes written
+	 */
+	protected int writeToOutputStream(DataBuffer dataBuffer) throws IOException {
+		ServletOutputStream outputStream = this.outputStream;
+		InputStream input = dataBuffer.asInputStream();
+		int bytesWritten = 0;
+		byte[] buffer = new byte[this.bufferSize];
+		int bytesRead;
+		while (outputStream.isReady() && (bytesRead = input.read(buffer)) != -1) {
+			outputStream.write(buffer, 0, bytesRead);
+			bytesWritten += bytesRead;
 		}
+		return bytesWritten;
+	}
 
-		public void registerListener() throws IOException {
-			this.outputStream.setWriteListener(this.writeListener);
+	private void flush() throws IOException {
+		ServletOutputStream outputStream = this.outputStream;
+		if (outputStream.isReady()) {
+			try {
+				outputStream.flush();
+				this.flushOnNext = false;
+			}
+			catch (IOException ex) {
+				this.flushOnNext = true;
+				throw ex;
+			}
+		}
+		else {
+			this.flushOnNext = true;
+		}
+	}
+
+	private boolean isWritePossible() {
+		return this.outputStream.isReady();
+	}
+
+
+	private final class ResponseAsyncListener implements AsyncListener {
+
+		@Override
+		public void onStartAsync(AsyncEvent event) {}
+
+		@Override
+		public void onTimeout(AsyncEvent event) {
+			Throwable ex = event.getThrowable();
+			ex = (ex != null ? ex : new IllegalStateException("Async operation timeout."));
+			handleError(ex);
 		}
 
 		@Override
-		protected boolean isWritePossible() {
-			return this.outputStream.isReady();
+		public void onError(AsyncEvent event) {
+			handleError(event.getThrowable());
+		}
+
+		void handleError(Throwable ex) {
+			ResponseBodyFlushProcessor flushProcessor = bodyFlushProcessor;
+			if (flushProcessor != null) {
+				flushProcessor.cancel();
+				flushProcessor.onError(ex);
+			}
+
+			ResponseBodyProcessor processor = bodyProcessor;
+			if (processor != null) {
+				processor.cancel();
+				processor.onError(ex);
+			}
 		}
 
 		@Override
-		protected boolean write(DataBuffer dataBuffer) throws IOException {
-			if (this.flushOnNext) {
-				flush();
+		public void onComplete(AsyncEvent event) {
+			ResponseBodyFlushProcessor flushProcessor = bodyFlushProcessor;
+			if (flushProcessor != null) {
+				flushProcessor.cancel();
+				flushProcessor.onComplete();
 			}
 
-			boolean ready = this.outputStream.isReady();
-
-			if (this.logger.isTraceEnabled()) {
-				this.logger.trace("write: " + dataBuffer + " ready: " + ready);
+			ResponseBodyProcessor processor = bodyProcessor;
+			if (processor != null) {
+				processor.cancel();
+				processor.onComplete();
 			}
+		}
+	}
 
-			if (ready) {
-				int total = dataBuffer.readableByteCount();
-				int written = writeDataBuffer(dataBuffer);
 
-				if (this.logger.isTraceEnabled()) {
-					this.logger.trace("written: " + written + " total: " + total);
-				}
-				return written == total;
+	private class ResponseBodyWriteListener implements WriteListener {
+
+		@Override
+		public void onWritePossible() throws IOException {
+			ResponseBodyProcessor processor = bodyProcessor;
+			if (processor != null) {
+				processor.onWritePossible();
 			}
 			else {
-				return false;
+				ResponseBodyFlushProcessor flushProcessor = bodyFlushProcessor;
+				if (flushProcessor != null) {
+					flushProcessor.onFlushPossible();
+				}
 			}
+		}
+
+		@Override
+		public void onError(Throwable ex) {
+			ResponseBodyProcessor processor = bodyProcessor;
+			if (processor != null) {
+				processor.cancel();
+				processor.onError(ex);
+			}
+			else {
+				ResponseBodyFlushProcessor flushProcessor = bodyFlushProcessor;
+				if (flushProcessor != null) {
+					flushProcessor.cancel();
+					flushProcessor.onError(ex);
+				}
+			}
+		}
+	}
+
+
+	private class ResponseBodyFlushProcessor extends AbstractListenerWriteFlushProcessor<DataBuffer> {
+
+		@Override
+		protected Processor<? super DataBuffer, Void> createWriteProcessor() {
+			ResponseBodyProcessor processor = new ResponseBodyProcessor();
+			bodyProcessor = processor;
+			return processor;
 		}
 
 		@Override
 		protected void flush() throws IOException {
-			if (this.outputStream.isReady()) {
+			if (logger.isTraceEnabled()) {
+				logger.trace("flush");
+			}
+			ServletServerHttpResponse.this.flush();
+		}
+
+		@Override
+		protected boolean isWritePossible() {
+			return ServletServerHttpResponse.this.isWritePossible();
+		}
+
+		@Override
+		protected boolean isFlushPending() {
+			return flushOnNext;
+		}
+	}
+
+
+	private class ResponseBodyProcessor extends AbstractListenerWriteProcessor<DataBuffer> {
+
+		@Override
+		protected boolean isWritePossible() {
+			return ServletServerHttpResponse.this.isWritePossible();
+		}
+
+		@Override
+		protected boolean isDataEmpty(DataBuffer dataBuffer) {
+			return dataBuffer.readableByteCount() == 0;
+		}
+
+		@Override
+		protected boolean write(DataBuffer dataBuffer) throws IOException {
+			if (ServletServerHttpResponse.this.flushOnNext) {
 				if (logger.isTraceEnabled()) {
 					logger.trace("flush");
 				}
-				this.outputStream.flush();
-				this.flushOnNext = false;
-				return;
+				flush();
 			}
-			this.flushOnNext = true;
-
+			boolean ready = ServletServerHttpResponse.this.isWritePossible();
+			if (this.logger.isTraceEnabled()) {
+				this.logger.trace("write: " + dataBuffer + " ready: " + ready);
+			}
+			int remaining = dataBuffer.readableByteCount();
+			if (ready && remaining > 0) {
+				int written = writeToOutputStream(dataBuffer);
+				if (this.logger.isTraceEnabled()) {
+					this.logger.trace("written: " + written + " total: " + remaining);
+				}
+				if (written == remaining) {
+					if (logger.isTraceEnabled()) {
+						logger.trace("releaseData: " + dataBuffer);
+					}
+					DataBufferUtils.release(dataBuffer);
+					return true;
+				}
+			}
+			return false;
 		}
 
-		private int writeDataBuffer(DataBuffer dataBuffer) throws IOException {
-			InputStream input = dataBuffer.asInputStream();
-
-			int bytesWritten = 0;
-			byte[] buffer = new byte[this.bufferSize];
-			int bytesRead = -1;
-
-			while (this.outputStream.isReady() &&
-					(bytesRead = input.read(buffer)) != -1) {
-				this.outputStream.write(buffer, 0, bytesRead);
-				bytesWritten += bytesRead;
-			}
-
-			return bytesWritten;
-		}
-
-		private class ResponseBodyWriteListener implements WriteListener {
-
-			@Override
-			public void onWritePossible() throws IOException {
-				ResponseBodyProcessor.this.onWritePossible();
-			}
-
-			@Override
-			public void onError(Throwable ex) {
-				ResponseBodyProcessor.this.onError(ex);
-			}
+		@Override
+		protected void writingComplete() {
+			bodyProcessor = null;
 		}
 	}
+
 }

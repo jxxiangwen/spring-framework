@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 package org.springframework.http.server.reactive;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -27,19 +27,20 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.core.io.buffer.DefaultDataBuffer;
 import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.ResponseCookie;
 
 import static junit.framework.TestCase.assertTrue;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 
 /**
  * @author Rossen Stoyanchev
  * @author Sebastien Deleuze
  */
 public class ServerHttpResponseTests {
-
-	public static final Charset UTF_8 = Charset.forName("UTF-8");
 
 
 	@Test
@@ -52,16 +53,30 @@ public class ServerHttpResponseTests {
 		assertTrue(response.cookiesWritten);
 
 		assertEquals(3, response.body.size());
-		assertEquals("a", new String(response.body.get(0).asByteBuffer().array(), UTF_8));
-		assertEquals("b", new String(response.body.get(1).asByteBuffer().array(), UTF_8));
-		assertEquals("c", new String(response.body.get(2).asByteBuffer().array(), UTF_8));
+		assertEquals("a", new String(response.body.get(0).asByteBuffer().array(), StandardCharsets.UTF_8));
+		assertEquals("b", new String(response.body.get(1).asByteBuffer().array(), StandardCharsets.UTF_8));
+		assertEquals("c", new String(response.body.get(2).asByteBuffer().array(), StandardCharsets.UTF_8));
+	}
+
+	@Test  // SPR-14952
+	public void writeAndFlushWithFluxOfDefaultDataBuffer() throws Exception {
+		TestServerHttpResponse response = new TestServerHttpResponse();
+		Flux<Flux<DefaultDataBuffer>> flux = Flux.just(Flux.just(wrap("foo")));
+		response.writeAndFlushWith(flux).block();
+
+		assertTrue(response.statusCodeWritten);
+		assertTrue(response.headersWritten);
+		assertTrue(response.cookiesWritten);
+
+		assertEquals(1, response.body.size());
+		assertEquals("foo", new String(response.body.get(0).asByteBuffer().array(), StandardCharsets.UTF_8));
 	}
 
 	@Test
 	public void writeWithError() throws Exception {
 		TestServerHttpResponse response = new TestServerHttpResponse();
 		IllegalStateException error = new IllegalStateException("boo");
-		response.writeWith(Flux.error(error)).otherwise(ex -> Mono.empty()).block();
+		response.writeWith(Flux.error(error)).onErrorResume(ex -> Mono.empty()).block();
 
 		assertFalse(response.statusCodeWritten);
 		assertFalse(response.headersWritten);
@@ -96,27 +111,9 @@ public class ServerHttpResponseTests {
 		assertSame(cookie, response.getCookies().getFirst("ID"));
 
 		assertEquals(3, response.body.size());
-		assertEquals("a", new String(response.body.get(0).asByteBuffer().array(), UTF_8));
-		assertEquals("b", new String(response.body.get(1).asByteBuffer().array(), UTF_8));
-		assertEquals("c", new String(response.body.get(2).asByteBuffer().array(), UTF_8));
-	}
-
-	@Test
-	public void beforeCommitActionWithError() throws Exception {
-		TestServerHttpResponse response = new TestServerHttpResponse();
-		IllegalStateException error = new IllegalStateException("boo");
-		response.beforeCommit(() -> Mono.error(error));
-		response.writeWith(Flux.just(wrap("a"), wrap("b"), wrap("c"))).block();
-
-		assertTrue("beforeCommit action errors should be ignored", response.statusCodeWritten);
-		assertTrue("beforeCommit action errors should be ignored", response.headersWritten);
-		assertTrue("beforeCommit action errors should be ignored", response.cookiesWritten);
-		assertNull(response.getCookies().get("ID"));
-
-		assertEquals(3, response.body.size());
-		assertEquals("a", new String(response.body.get(0).asByteBuffer().array(), UTF_8));
-		assertEquals("b", new String(response.body.get(1).asByteBuffer().array(), UTF_8));
-		assertEquals("c", new String(response.body.get(2).asByteBuffer().array(), UTF_8));
+		assertEquals("a", new String(response.body.get(0).asByteBuffer().array(), StandardCharsets.UTF_8));
+		assertEquals("b", new String(response.body.get(1).asByteBuffer().array(), StandardCharsets.UTF_8));
+		assertEquals("c", new String(response.body.get(2).asByteBuffer().array(), StandardCharsets.UTF_8));
 	}
 
 	@Test
@@ -138,8 +135,8 @@ public class ServerHttpResponseTests {
 
 
 
-	private DataBuffer wrap(String a) {
-		return new DefaultDataBufferFactory().wrap(ByteBuffer.wrap(a.getBytes(UTF_8)));
+	private DefaultDataBuffer wrap(String a) {
+		return new DefaultDataBufferFactory().wrap(ByteBuffer.wrap(a.getBytes(StandardCharsets.UTF_8)));
 	}
 
 
@@ -158,29 +155,45 @@ public class ServerHttpResponseTests {
 		}
 
 		@Override
-		public void writeStatusCode() {
+		public <T> T getNativeResponse() {
+			throw new IllegalStateException("This is a mock. No running server, no native response.");
+		}
+
+		@Override
+		public void applyStatusCode() {
 			assertFalse(this.statusCodeWritten);
 			this.statusCodeWritten = true;
 		}
 
 		@Override
-		protected void writeHeaders() {
+		protected void applyHeaders() {
 			assertFalse(this.headersWritten);
 			this.headersWritten = true;
 		}
 
 		@Override
-		protected void writeCookies() {
+		protected void applyCookies() {
 			assertFalse(this.cookiesWritten);
 			this.cookiesWritten = true;
 		}
 
 		@Override
-		protected Mono<Void> writeWithInternal(Publisher<DataBuffer> body) {
+		protected Mono<Void> writeWithInternal(Publisher<? extends DataBuffer> body) {
 			return Flux.from(body).map(b -> {
 				this.body.add(b);
 				return b;
 			}).then();
+		}
+
+		@Override
+		protected Mono<Void> writeAndFlushWithInternal(
+				Publisher<? extends Publisher<? extends DataBuffer>> bodyWithFlush) {
+			return Flux.from(bodyWithFlush).flatMap(body ->
+				Flux.from(body).map(b -> {
+					this.body.add(b);
+					return b;
+				})
+			).then();
 		}
 	}
 

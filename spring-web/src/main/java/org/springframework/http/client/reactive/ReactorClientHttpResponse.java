@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ package org.springframework.http.client.reactive;
 import java.util.Collection;
 
 import reactor.core.publisher.Flux;
-import reactor.io.netty.http.HttpClientResponse;
+import reactor.ipc.netty.http.client.HttpClientResponse;
 
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.NettyDataBufferFactory;
@@ -31,22 +31,24 @@ import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
 /**
- * {@link ClientHttpResponse} implementation for the Reactor-Netty HTTP client
+ * {@link ClientHttpResponse} implementation for the Reactor-Netty HTTP client.
  *
  * @author Brian Clozel
  * @since 5.0
- * @see reactor.io.netty.http.HttpClient
+ * @see reactor.ipc.netty.http.client.HttpClient
  */
-public class ReactorClientHttpResponse implements ClientHttpResponse {
+class ReactorClientHttpResponse implements ClientHttpResponse {
 
 	private final NettyDataBufferFactory dataBufferFactory;
 
 	private final HttpClientResponse response;
 
+
 	public ReactorClientHttpResponse(HttpClientResponse response) {
 		this.response = response;
-		this.dataBufferFactory = new NettyDataBufferFactory(response.delegate().alloc());
+		this.dataBufferFactory = new NettyDataBufferFactory(response.channel().alloc());
 	}
+
 
 	@Override
 	public Flux<DataBuffer> getBody() {
@@ -60,7 +62,8 @@ public class ReactorClientHttpResponse implements ClientHttpResponse {
 	@Override
 	public HttpHeaders getHeaders() {
 		HttpHeaders headers = new HttpHeaders();
-		this.response.responseHeaders().entries().stream().forEach(e -> headers.add(e.getKey(), e.getValue()));
+		this.response.responseHeaders().entries()
+		             .forEach(e -> headers.add(e.getKey(), e.getValue()));
 		return headers;
 	}
 
@@ -89,9 +92,8 @@ public class ReactorClientHttpResponse implements ClientHttpResponse {
 	@Override
 	public String toString() {
 		return "ReactorClientHttpResponse{" +
-				"request=" + this.response.method().name() + " " + this.response.uri() + "," +
-				"status=" + getStatusCode() +
-				'}';
+				"request=[" + this.response.method().name() + " " + this.response.uri() + "]," +
+				"status=" + getStatusCode() + '}';
 	}
 
 }

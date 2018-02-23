@@ -48,7 +48,7 @@ import static org.springframework.tests.TestResourceUtils.*;
  * @author Chris Beams
  * @since 10.03.2004
  */
-public final class ConcurrentBeanFactoryTests {
+public class ConcurrentBeanFactoryTests {
 
 	private static final Log logger = LogFactory.getLog(ConcurrentBeanFactoryTests.class);
 	private static final Resource CONTEXT = qualifiedResource(ConcurrentBeanFactoryTests.class, "context.xml");
@@ -126,8 +126,8 @@ public final class ConcurrentBeanFactoryTests {
 		ConcurrentBean b1 = (ConcurrentBean) factory.getBean("bean1");
 		ConcurrentBean b2 = (ConcurrentBean) factory.getBean("bean2");
 
-		assertEquals(b1.getDate(), DATE_1);
-		assertEquals(b2.getDate(), DATE_2);
+		assertEquals(DATE_1, b1.getDate());
+		assertEquals(DATE_2, b2.getDate());
 	}
 
 

@@ -16,26 +16,28 @@
 
 package org.springframework.http.converter.feed;
 
+import static org.junit.Assert.*;
+import static org.xmlunit.matchers.CompareMatcher.*;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
 import com.rometools.rome.feed.atom.Entry;
 import com.rometools.rome.feed.atom.Feed;
-import org.custommonkey.xmlunit.XMLUnit;
 import org.junit.Before;
 import org.junit.Test;
 import org.xml.sax.SAXException;
+import org.xmlunit.diff.DefaultNodeMatcher;
+import org.xmlunit.diff.ElementSelectors;
+import org.xmlunit.diff.NodeMatcher;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.MockHttpInputMessage;
 import org.springframework.http.MockHttpOutputMessage;
-
-import static org.custommonkey.xmlunit.XMLAssert.*;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 /**
  * @author Arjen Poutsma
@@ -44,32 +46,30 @@ public class AtomFeedHttpMessageConverterTests {
 
 	private AtomFeedHttpMessageConverter converter;
 
-	private Charset utf8;
 
 	@Before
 	public void setUp() {
-		utf8 = Charset.forName("UTF-8");
 		converter = new AtomFeedHttpMessageConverter();
-		XMLUnit.setIgnoreWhitespace(true);
 	}
+
 
 	@Test
 	public void canRead() {
 		assertTrue(converter.canRead(Feed.class, new MediaType("application", "atom+xml")));
-		assertTrue(converter.canRead(Feed.class, new MediaType("application", "atom+xml", utf8)));
+		assertTrue(converter.canRead(Feed.class, new MediaType("application", "atom+xml", StandardCharsets.UTF_8)));
 	}
 
 	@Test
 	public void canWrite() {
 		assertTrue(converter.canWrite(Feed.class, new MediaType("application", "atom+xml")));
-		assertTrue(converter.canWrite(Feed.class, new MediaType("application", "atom+xml", Charset.forName("UTF-8"))));
+		assertTrue(converter.canWrite(Feed.class, new MediaType("application", "atom+xml", StandardCharsets.UTF_8)));
 	}
 
 	@Test
 	public void read() throws IOException {
 		InputStream is = getClass().getResourceAsStream("atom.xml");
 		MockHttpInputMessage inputMessage = new MockHttpInputMessage(is);
-		inputMessage.getHeaders().setContentType(new MediaType("application", "atom+xml", utf8));
+		inputMessage.getHeaders().setContentType(new MediaType("application", "atom+xml", StandardCharsets.UTF_8));
 		Feed result = converter.read(Feed.class, inputMessage);
 		assertEquals("title", result.getTitle());
 		assertEquals("subtitle", result.getSubtitle().getValue());
@@ -106,12 +106,14 @@ public class AtomFeedHttpMessageConverterTests {
 		MockHttpOutputMessage outputMessage = new MockHttpOutputMessage();
 		converter.write(feed, null, outputMessage);
 
-		assertEquals("Invalid content-type", new MediaType("application", "atom+xml", utf8),
+		assertEquals("Invalid content-type", new MediaType("application", "atom+xml", StandardCharsets.UTF_8),
 				outputMessage.getHeaders().getContentType());
 		String expected = "<feed xmlns=\"http://www.w3.org/2005/Atom\">" + "<title>title</title>" +
 				"<entry><id>id1</id><title>title1</title></entry>" +
 				"<entry><id>id2</id><title>title2</title></entry></feed>";
-		assertXMLEqual(expected, outputMessage.getBodyAsString(utf8));
+		NodeMatcher nm = new DefaultNodeMatcher(ElementSelectors.byName);
+		assertThat(outputMessage.getBodyAsString(StandardCharsets.UTF_8),
+				isSimilarTo(expected).ignoreWhitespace().withNodeMatcher(nm));
 	}
 
 	@Test
