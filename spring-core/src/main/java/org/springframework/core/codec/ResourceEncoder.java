@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,7 @@
 
 package org.springframework.core.codec;
 
-import java.io.IOException;
-import java.io.InputStream;
+import java.util.Map;
 
 import reactor.core.publisher.Flux;
 
@@ -25,14 +24,16 @@ import org.springframework.core.ResolvableType;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
-import org.springframework.core.io.buffer.support.DataBufferUtils;
+import org.springframework.core.io.buffer.DataBufferUtils;
+import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.util.MimeType;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.util.StreamUtils;
 
 /**
- * An encoder for {@link Resource}s.
+ * Encoder for {@link Resource}s.
+ *
  * @author Arjen Poutsma
  * @since 5.0
  */
@@ -42,29 +43,29 @@ public class ResourceEncoder extends AbstractSingleValueEncoder<Resource> {
 
 	private final int bufferSize;
 
+
 	public ResourceEncoder() {
 		this(DEFAULT_BUFFER_SIZE);
 	}
 
 	public ResourceEncoder(int bufferSize) {
-		super(MimeTypeUtils.ALL);
+		super(MimeTypeUtils.APPLICATION_OCTET_STREAM, MimeTypeUtils.ALL);
 		Assert.isTrue(bufferSize > 0, "'bufferSize' must be larger than 0");
 		this.bufferSize = bufferSize;
 	}
 
+
 	@Override
-	public boolean canEncode(ResolvableType elementType, MimeType mimeType, Object... hints) {
-		Class<?> clazz = elementType.getRawClass();
-		return (super.canEncode(elementType, mimeType, hints) &&
-				Resource.class.isAssignableFrom(clazz));
+	public boolean canEncode(ResolvableType elementType, @Nullable MimeType mimeType) {
+		Class<?> clazz = elementType.resolve(Object.class);
+		return (super.canEncode(elementType, mimeType) && Resource.class.isAssignableFrom(clazz));
 	}
 
 	@Override
-	protected Flux<DataBuffer> encode(Resource resource,
-			DataBufferFactory dataBufferFactory,
-			ResolvableType type, MimeType mimeType, Object... hints) throws IOException {
-		InputStream is = resource.getInputStream();
-		return DataBufferUtils.read(is, dataBufferFactory, bufferSize);
+	protected Flux<DataBuffer> encode(Resource resource, DataBufferFactory dataBufferFactory,
+			ResolvableType type, @Nullable MimeType mimeType, @Nullable Map<String, Object> hints) {
+
+		return DataBufferUtils.read(resource, dataBufferFactory, this.bufferSize);
 	}
 
 }

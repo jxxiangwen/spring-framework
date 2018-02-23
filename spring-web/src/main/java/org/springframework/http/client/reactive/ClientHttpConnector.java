@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.http.client.reactive;
 
 import java.net.URI;
@@ -23,10 +24,9 @@ import reactor.core.publisher.Mono;
 import org.springframework.http.HttpMethod;
 
 /**
- * Client abstraction for HTTP client runtimes.
- * {@link ClientHttpConnector} drives the underlying HTTP client implementation
- * so as to connect to the origin server and provide all the necessary infrastructure
- * to send the actual {@link ClientHttpRequest} and receive the {@link ClientHttpResponse}
+ * Abstraction over HTTP clients driving the underlying HTTP client to connect
+ * to the origin server and provide all necessary infrastructure to send a
+ * {@link ClientHttpRequest} and receive a {@link ClientHttpResponse}.
  *
  * @author Brian Clozel
  * @since 5.0
@@ -34,16 +34,15 @@ import org.springframework.http.HttpMethod;
 public interface ClientHttpConnector {
 
 	/**
-	 * Connect to the origin server using the given {@code HttpMethod} and {@code URI},
-	 * then apply the given {@code requestCallback} on the {@link ClientHttpRequest}
-	 * once the connection has been established.
+	 * Connect to the origin server using the given {@code HttpMethod} and
+	 * {@code URI}, then apply the given {@code requestCallback} on the
+	 * {@link ClientHttpRequest} once the connection has been established.
 	 * <p>Return a publisher of the {@link ClientHttpResponse}.
-	 *
 	 * @param method the HTTP request method
 	 * @param uri the HTTP request URI
 	 * @param requestCallback a function that prepares and writes the request,
-	 * returning a publisher that signals when it's done interacting with the request.
-	 * Implementations should return a {@code Mono<Void>} by calling
+	 * returning a publisher that signals when it's done interacting with the
+	 * request. Implementations should return a {@code Mono<Void>} by calling
 	 * {@link ClientHttpRequest#writeWith} or {@link ClientHttpRequest#setComplete}.
 	 * @return a publisher of the {@link ClientHttpResponse}
 	 */

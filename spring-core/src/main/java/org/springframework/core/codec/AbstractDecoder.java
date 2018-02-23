@@ -17,24 +17,28 @@
 package org.springframework.core.codec;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 
 import org.springframework.core.ResolvableType;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.lang.Nullable;
 import org.springframework.util.MimeType;
 
 /**
+ * Abstract base class for {@link Decoder} implementations.
+ *
  * @author Sebastien Deleuze
  * @author Arjen Poutsma
  * @since 5.0
  */
 public abstract class AbstractDecoder<T> implements Decoder<T> {
 
-	private List<MimeType> decodableMimeTypes = Collections.emptyList();
+	private final List<MimeType> decodableMimeTypes;
+
 
 	protected AbstractDecoder(MimeType... supportedMimeTypes) {
 		this.decodableMimeTypes = Arrays.asList(supportedMimeTypes);
@@ -47,16 +51,18 @@ public abstract class AbstractDecoder<T> implements Decoder<T> {
 	}
 
 	@Override
-	public boolean canDecode(ResolvableType elementType, MimeType mimeType, Object... hints) {
+	public boolean canDecode(ResolvableType elementType, @Nullable MimeType mimeType) {
 		if (mimeType == null) {
 			return true;
 		}
-		return this.decodableMimeTypes.stream().
-				anyMatch(mt -> mt.isCompatibleWith(mimeType));
+		return this.decodableMimeTypes.stream().anyMatch(candidate -> candidate.isCompatibleWith(mimeType));
 	}
 
 	@Override
-	public Mono<T> decodeToMono(Publisher<DataBuffer> inputStream, ResolvableType elementType, MimeType mimeType, Object... hints) {
+	public Mono<T> decodeToMono(Publisher<DataBuffer> inputStream, ResolvableType elementType,
+			@Nullable MimeType mimeType, @Nullable Map<String, Object> hints) {
+
 		throw new UnsupportedOperationException();
 	}
+
 }

@@ -17,8 +17,8 @@
 package org.springframework.core.io.buffer;
 
 /**
- * Extension of {@link DataBuffer} that allows for buffer that share a memory pool.
- * Introduces methods for reference counting.
+ * Extension of {@link DataBuffer} that allows for buffer that share a memory
+ * pool. Introduces methods for reference counting.
  *
  * @author Arjen Poutsma
  * @since 5.0
@@ -26,14 +26,14 @@ package org.springframework.core.io.buffer;
 public interface PooledDataBuffer extends DataBuffer {
 
 	/**
-	 * Increases the reference count for this buffer by one.
+	 * Increase the reference count for this buffer by one.
 	 * @return this buffer
 	 */
 	PooledDataBuffer retain();
 
 	/**
-	 * Decreases the reference count for this buffer by one, and releases it once the
-	 * count reaches zero.
+	 * Decrease the reference count for this buffer by one, and release it
+	 * once the count reaches zero.
 	 * @return {@code true} if the buffer was released; {@code false} otherwise.
 	 */
 	boolean release();

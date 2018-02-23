@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,10 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.web.servlet.mvc.method.annotation;
 
 import java.lang.reflect.Method;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -61,8 +62,7 @@ public class StreamingResponseBodyReturnValueHandlerTests {
 
 
 	@Before
-	public void setUp() throws Exception {
-
+	public void setup() throws Exception {
 		this.handler = new StreamingResponseBodyReturnValueHandler();
 		this.mavContainer = new ModelAndViewContainer();
 
@@ -86,12 +86,11 @@ public class StreamingResponseBodyReturnValueHandlerTests {
 
 	@Test
 	public void streamingResponseBody() throws Exception {
-
 		CountDownLatch latch = new CountDownLatch(1);
 
 		MethodParameter returnType = returnType(TestController.class, "handle");
 		StreamingResponseBody streamingBody = outputStream -> {
-			outputStream.write("foo".getBytes(Charset.forName("UTF-8")));
+			outputStream.write("foo".getBytes(StandardCharsets.UTF_8));
 			latch.countDown();
 		};
 		this.handler.handleReturnValue(streamingBody, returnType, this.mavContainer, this.webRequest);
@@ -104,13 +103,12 @@ public class StreamingResponseBodyReturnValueHandlerTests {
 
 	@Test
 	public void responseEntity() throws Exception {
-
 		CountDownLatch latch = new CountDownLatch(1);
 
 		MethodParameter returnType = returnType(TestController.class, "handleResponseEntity");
 		ResponseEntity<StreamingResponseBody> emitter = ResponseEntity.ok().header("foo", "bar")
 				.body(outputStream -> {
-					outputStream.write("foo".getBytes(Charset.forName("UTF-8")));
+					outputStream.write("foo".getBytes(StandardCharsets.UTF_8));
 					latch.countDown();
 				});
 		this.handler.handleReturnValue(emitter, returnType, this.mavContainer, this.webRequest);

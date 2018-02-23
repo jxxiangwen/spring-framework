@@ -17,11 +17,13 @@
 package org.springframework.core.codec;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
 
 import org.junit.Test;
 import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
-import reactor.test.TestSubscriber;
+import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 import org.springframework.core.ResolvableType;
 import org.springframework.core.io.buffer.AbstractDataBufferAllocatingTestCase;
@@ -40,9 +42,12 @@ public class ByteBufferDecoderTests extends AbstractDataBufferAllocatingTestCase
 
 	@Test
 	public void canDecode() {
-		assertTrue(this.decoder.canDecode(ResolvableType.forClass(ByteBuffer.class), MimeTypeUtils.TEXT_PLAIN));
-		assertFalse(this.decoder.canDecode(ResolvableType.forClass(Integer.class), MimeTypeUtils.TEXT_PLAIN));
-		assertTrue(this.decoder.canDecode(ResolvableType.forClass(ByteBuffer.class), MimeTypeUtils.APPLICATION_JSON));
+		assertTrue(this.decoder.canDecode(ResolvableType.forClass(ByteBuffer.class),
+				MimeTypeUtils.TEXT_PLAIN));
+		assertFalse(this.decoder.canDecode(ResolvableType.forClass(Integer.class),
+				MimeTypeUtils.TEXT_PLAIN));
+		assertTrue(this.decoder.canDecode(ResolvableType.forClass(ByteBuffer.class),
+				MimeTypeUtils.APPLICATION_JSON));
 	}
 
 	@Test
@@ -52,11 +57,26 @@ public class ByteBufferDecoderTests extends AbstractDataBufferAllocatingTestCase
 		Flux<DataBuffer> source = Flux.just(fooBuffer, barBuffer);
 		Flux<ByteBuffer> output = this.decoder.decode(source,
 				ResolvableType.forClassWithGenerics(Publisher.class, ByteBuffer.class),
-				null);
-		TestSubscriber
-				.subscribe(output)
-				.assertNoError()
-				.assertComplete()
-				.assertValues(ByteBuffer.wrap("foo".getBytes()), ByteBuffer.wrap("bar".getBytes()));
+				null, Collections.emptyMap());
+
+		StepVerifier.create(output)
+				.expectNext(ByteBuffer.wrap("foo".getBytes()), ByteBuffer.wrap("bar".getBytes()))
+				.expectComplete()
+				.verify();
+	}
+
+	@Test
+	public void decodeToMono() {
+		DataBuffer fooBuffer = stringBuffer("foo");
+		DataBuffer barBuffer = stringBuffer("bar");
+		Flux<DataBuffer> source = Flux.just(fooBuffer, barBuffer);
+		Mono<ByteBuffer> output = this.decoder.decodeToMono(source,
+				ResolvableType.forClassWithGenerics(Publisher.class, ByteBuffer.class),
+				null, Collections.emptyMap());
+
+		StepVerifier.create(output)
+				.expectNext(ByteBuffer.wrap("foobar".getBytes()))
+				.expectComplete()
+				.verify();
 	}
 }

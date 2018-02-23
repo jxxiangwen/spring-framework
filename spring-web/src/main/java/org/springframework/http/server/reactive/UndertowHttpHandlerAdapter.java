@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 package org.springframework.http.server.reactive;
 
+import java.io.IOException;
+
 import io.undertow.server.HttpServerExchange;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -23,9 +25,13 @@ import org.reactivestreams.Subscriber;
 import org.reactivestreams.Subscription;
 
 import org.springframework.core.io.buffer.DataBufferFactory;
+import org.springframework.core.io.buffer.DefaultDataBufferFactory;
+import org.springframework.http.HttpMethod;
 import org.springframework.util.Assert;
 
 /**
+ * Adapt {@link HttpHandler} to the Undertow {@link io.undertow.server.HttpHandler}.
+ *
  * @author Marek Hawrylczak
  * @author Rossen Stoyanchev
  * @author Arjen Poutsma
@@ -33,56 +39,86 @@ import org.springframework.util.Assert;
  */
 public class UndertowHttpHandlerAdapter implements io.undertow.server.HttpHandler {
 
-	private static Log logger = LogFactory.getLog(UndertowHttpHandlerAdapter.class);
+	private static final Log logger = LogFactory.getLog(UndertowHttpHandlerAdapter.class);
 
 
-	private final HttpHandler delegate;
+	private final HttpHandler httpHandler;
 
-	private final DataBufferFactory dataBufferFactory;
+	private DataBufferFactory bufferFactory = new DefaultDataBufferFactory(false);
 
-	public UndertowHttpHandlerAdapter(HttpHandler delegate,
-			DataBufferFactory dataBufferFactory) {
-		Assert.notNull(delegate, "'delegate' is required");
-		Assert.notNull(dataBufferFactory, "'dataBufferFactory' must not be null");
-		this.delegate = delegate;
-		this.dataBufferFactory = dataBufferFactory;
+
+	public UndertowHttpHandlerAdapter(HttpHandler httpHandler) {
+		Assert.notNull(httpHandler, "HttpHandler must not be null");
+		this.httpHandler = httpHandler;
 	}
+
+
+	public void setDataBufferFactory(DataBufferFactory bufferFactory) {
+		Assert.notNull(bufferFactory, "DataBufferFactory must not be null");
+		this.bufferFactory = bufferFactory;
+	}
+
+	public DataBufferFactory getDataBufferFactory() {
+		return this.bufferFactory;
+	}
+
 
 	@Override
 	public void handleRequest(HttpServerExchange exchange) throws Exception {
+		ServerHttpRequest request = new UndertowServerHttpRequest(exchange, getDataBufferFactory());
+		ServerHttpResponse response = new UndertowServerHttpResponse(exchange, getDataBufferFactory());
 
-		ServerHttpRequest request =
-				new UndertowServerHttpRequest(exchange, this.dataBufferFactory);
+		if (request.getMethod() == HttpMethod.HEAD) {
+			response = new HttpHeadResponseDecorator(response);
+		}
 
-		ServerHttpResponse response =
-				new UndertowServerHttpResponse(exchange, this.dataBufferFactory);
+		HandlerResultSubscriber resultSubscriber = new HandlerResultSubscriber(exchange);
+		this.httpHandler.handle(request, response).subscribe(resultSubscriber);
+	}
 
-		this.delegate.handle(request, response).subscribe(new Subscriber<Void>() {
 
-			@Override
-			public void onSubscribe(Subscription subscription) {
-				subscription.request(Long.MAX_VALUE);
-			}
+	private class HandlerResultSubscriber implements Subscriber<Void> {
 
-			@Override
-			public void onNext(Void aVoid) {
-				// no op
-			}
+		private final HttpServerExchange exchange;
 
-			@Override
-			public void onError(Throwable ex) {
-				logger.error("Error from request handling. Completing the request.", ex);
-				if (!exchange.isResponseStarted() && exchange.getStatusCode() <= 500) {
-					exchange.setStatusCode(500);
+		public HandlerResultSubscriber(HttpServerExchange exchange) {
+			this.exchange = exchange;
+		}
+
+		@Override
+		public void onSubscribe(Subscription subscription) {
+			subscription.request(Long.MAX_VALUE);
+		}
+
+		@Override
+		public void onNext(Void aVoid) {
+			// no-op
+		}
+
+		@Override
+		public void onError(Throwable ex) {
+			logger.error("Handling completed with error", ex);
+			if (this.exchange.isResponseStarted()) {
+				try {
+					logger.debug("Closing connection");
+					this.exchange.getConnection().close();
 				}
-				exchange.endExchange();
+				catch (IOException ex2) {
+					// ignore
+				}
 			}
+			else {
+				logger.debug("Setting response status code to 500");
+				this.exchange.setStatusCode(500);
+				this.exchange.endExchange();
+			}
+		}
 
-			@Override
-			public void onComplete() {
-				exchange.endExchange();
-			}
-		});
+		@Override
+		public void onComplete() {
+			logger.debug("Handling completed with success");
+			this.exchange.endExchange();
+		}
 	}
 
 }

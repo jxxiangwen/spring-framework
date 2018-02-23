@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,38 +16,65 @@
 
 package org.springframework.http.server.reactive;
 
-import io.netty.buffer.ByteBuf;
+import java.net.URISyntaxException;
+import java.util.function.BiFunction;
+
+import io.netty.handler.codec.http.HttpResponseStatus;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import reactor.core.publisher.Mono;
-import reactor.io.ipc.ChannelHandler;
-import reactor.io.netty.http.HttpChannel;
+import reactor.ipc.netty.http.server.HttpServerRequest;
+import reactor.ipc.netty.http.server.HttpServerResponse;
 
 import org.springframework.core.io.buffer.NettyDataBufferFactory;
+import org.springframework.http.HttpMethod;
 import org.springframework.util.Assert;
 
 /**
+ * Adapt {@link HttpHandler} to the Reactor Netty channel handling function.
+ *
  * @author Stephane Maldini
+ * @author Rossen Stoyanchev
  * @since 5.0
  */
-public class ReactorHttpHandlerAdapter
-		implements ChannelHandler<ByteBuf, ByteBuf, HttpChannel> {
+public class ReactorHttpHandlerAdapter implements BiFunction<HttpServerRequest, HttpServerResponse, Mono<Void>> {
+
+	private static final Log logger = LogFactory.getLog(ReactorHttpHandlerAdapter.class);
+
 
 	private final HttpHandler httpHandler;
 
+
 	public ReactorHttpHandlerAdapter(HttpHandler httpHandler) {
-		Assert.notNull(httpHandler, "'httpHandler' is required.");
+		Assert.notNull(httpHandler, "HttpHandler must not be null");
 		this.httpHandler = httpHandler;
 	}
 
-	@Override
-	public Mono<Void> apply(HttpChannel channel) {
-		NettyDataBufferFactory dataBufferFactory =
-				new NettyDataBufferFactory(channel.delegate().alloc());
 
-		ReactorServerHttpRequest adaptedRequest =
-				new ReactorServerHttpRequest(channel, dataBufferFactory);
-		ReactorServerHttpResponse adaptedResponse =
-				new ReactorServerHttpResponse(channel, dataBufferFactory);
-		return this.httpHandler.handle(adaptedRequest, adaptedResponse);
+	@Override
+	public Mono<Void> apply(HttpServerRequest request, HttpServerResponse response) {
+		NettyDataBufferFactory bufferFactory = new NettyDataBufferFactory(response.alloc());
+		ServerHttpRequest adaptedRequest;
+		ServerHttpResponse adaptedResponse;
+		try {
+			adaptedRequest = new ReactorServerHttpRequest(request, bufferFactory);
+			adaptedResponse = new ReactorServerHttpResponse(response, bufferFactory);
+		}
+		catch (URISyntaxException ex) {
+			if (logger.isWarnEnabled()) {
+				logger.warn("Invalid URL for incoming request: " + ex.getMessage());
+			}
+			response.status(HttpResponseStatus.BAD_REQUEST);
+			return Mono.empty();
+		}
+
+		if (adaptedRequest.getMethod() == HttpMethod.HEAD) {
+			adaptedResponse = new HttpHeadResponseDecorator(adaptedResponse);
+		}
+
+		return this.httpHandler.handle(adaptedRequest, adaptedResponse)
+				.doOnError(ex -> logger.error("Handling completed with error", ex))
+				.doOnSuccess(aVoid -> logger.debug("Handling completed with success"));
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,6 +63,8 @@ import org.springframework.beans.BeanWrapper;
 import org.springframework.beans.PropertyAccessorFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
+import org.springframework.lang.Nullable;
+import org.springframework.util.Assert;
 import org.springframework.util.ClassUtils;
 import org.springframework.web.context.ServletContextAware;
 
@@ -130,20 +132,25 @@ public class TilesConfigurer implements ServletContextAware, InitializingBean, D
 
 	protected final Log logger = LogFactory.getLog(getClass());
 
+	@Nullable
 	private TilesInitializer tilesInitializer;
 
+	@Nullable
 	private String[] definitions;
 
 	private boolean checkRefresh = false;
 
 	private boolean validateDefinitions = true;
 
+	@Nullable
 	private Class<? extends DefinitionsFactory> definitionsFactoryClass;
 
+	@Nullable
 	private Class<? extends PreparerFactory> preparerFactoryClass;
 
 	private boolean useMutableTilesContainer = false;
 
+	@Nullable
 	private ServletContext servletContext;
 
 
@@ -264,6 +271,7 @@ public class TilesConfigurer implements ServletContextAware, InitializingBean, D
 	 */
 	@Override
 	public void afterPropertiesSet() throws TilesException {
+		Assert.state(this.servletContext != null, "No ServletContext available");
 		ApplicationContext preliminaryContext = new SpringWildcardServletTilesApplicationContext(this.servletContext);
 		if (this.tilesInitializer == null) {
 			this.tilesInitializer = new SpringTilesInitializer();
@@ -277,7 +285,9 @@ public class TilesConfigurer implements ServletContextAware, InitializingBean, D
 	 */
 	@Override
 	public void destroy() throws TilesException {
-		this.tilesInitializer.destroy();
+		if (this.tilesInitializer != null) {
+			this.tilesInitializer.destroy();
+		}
 	}
 
 
@@ -336,7 +346,7 @@ public class TilesConfigurer implements ServletContextAware, InitializingBean, D
 				LocaleResolver resolver) {
 
 			if (definitionsFactoryClass != null) {
-				DefinitionsFactory factory = BeanUtils.instantiate(definitionsFactoryClass);
+				DefinitionsFactory factory = BeanUtils.instantiateClass(definitionsFactoryClass);
 				if (factory instanceof ApplicationContextAware) {
 					((ApplicationContextAware) factory).setApplicationContext(applicationContext);
 				}
@@ -357,7 +367,7 @@ public class TilesConfigurer implements ServletContextAware, InitializingBean, D
 		@Override
 		protected PreparerFactory createPreparerFactory(ApplicationContext context) {
 			if (preparerFactoryClass != null) {
-				return BeanUtils.instantiate(preparerFactoryClass);
+				return BeanUtils.instantiateClass(preparerFactoryClass);
 			}
 			else {
 				return super.createPreparerFactory(context);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,6 +23,8 @@ import java.util.Locale;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
+import org.springframework.lang.Nullable;
+import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.LocaleResolver;
 
 /**
@@ -42,6 +44,7 @@ public class AcceptHeaderLocaleResolver implements LocaleResolver {
 
 	private final List<Locale> supportedLocales = new ArrayList<>(4);
 
+	@Nullable
 	private Locale defaultLocale;
 
 
@@ -54,9 +57,7 @@ public class AcceptHeaderLocaleResolver implements LocaleResolver {
 	 */
 	public void setSupportedLocales(List<Locale> locales) {
 		this.supportedLocales.clear();
-		if (locales != null) {
-			this.supportedLocales.addAll(locales);
-		}
+		this.supportedLocales.addAll(locales);
 	}
 
 	/**
@@ -76,7 +77,7 @@ public class AcceptHeaderLocaleResolver implements LocaleResolver {
 	 * @param defaultLocale the default locale to use
 	 * @since 4.3
 	 */
-	public void setDefaultLocale(Locale defaultLocale) {
+	public void setDefaultLocale(@Nullable Locale defaultLocale) {
 		this.defaultLocale = defaultLocale;
 	}
 
@@ -84,6 +85,7 @@ public class AcceptHeaderLocaleResolver implements LocaleResolver {
 	 * The configured default locale, if any.
 	 * @since 4.3
 	 */
+	@Nullable
 	public Locale getDefaultLocale() {
 		return this.defaultLocale;
 	}
@@ -95,11 +97,15 @@ public class AcceptHeaderLocaleResolver implements LocaleResolver {
 		if (defaultLocale != null && request.getHeader("Accept-Language") == null) {
 			return defaultLocale;
 		}
-		Locale locale = request.getLocale();
-		if (!isSupportedLocale(locale)) {
-			locale = findSupportedLocale(request, locale);
+		Locale requestLocale = request.getLocale();
+		if (isSupportedLocale(requestLocale)) {
+			return requestLocale;
 		}
-		return locale;
+		Locale supportedLocale = findSupportedLocale(request);
+		if (supportedLocale != null) {
+			return supportedLocale;
+		}
+		return (defaultLocale != null ? defaultLocale : requestLocale);
 	}
 
 	private boolean isSupportedLocale(Locale locale) {
@@ -107,19 +113,32 @@ public class AcceptHeaderLocaleResolver implements LocaleResolver {
 		return (supportedLocales.isEmpty() || supportedLocales.contains(locale));
 	}
 
-	private Locale findSupportedLocale(HttpServletRequest request, Locale fallback) {
+	@Nullable
+	private Locale findSupportedLocale(HttpServletRequest request) {
 		Enumeration<Locale> requestLocales = request.getLocales();
+		List<Locale> supported = getSupportedLocales();
+		Locale languageMatch = null;
 		while (requestLocales.hasMoreElements()) {
 			Locale locale = requestLocales.nextElement();
-			if (getSupportedLocales().contains(locale)) {
+			if (supported.contains(locale)) {
+				// Full match: typically language + country
 				return locale;
 			}
+			else if (languageMatch == null) {
+				// Let's try to find a language-only match as a fallback
+				for (Locale candidate : supported) {
+					if (!StringUtils.hasLength(candidate.getCountry()) &&
+							candidate.getLanguage().equals(locale.getLanguage())) {
+						languageMatch = candidate;
+					}
+				}
+			}
 		}
-		return fallback;
+		return languageMatch;
 	}
 
 	@Override
-	public void setLocale(HttpServletRequest request, HttpServletResponse response, Locale locale) {
+	public void setLocale(HttpServletRequest request, @Nullable HttpServletResponse response, @Nullable Locale locale) {
 		throw new UnsupportedOperationException(
 				"Cannot change HTTP accept header - use a different locale resolution strategy");
 	}

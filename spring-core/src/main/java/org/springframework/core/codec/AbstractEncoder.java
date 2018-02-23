@@ -17,20 +17,23 @@
 package org.springframework.core.codec;
 
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 import org.springframework.core.ResolvableType;
+import org.springframework.lang.Nullable;
 import org.springframework.util.MimeType;
 
 /**
+ * Abstract base class for {@link Decoder} implementations.
+ *
  * @author Sebastien Deleuze
  * @author Arjen Poutsma
  * @since 5.0
  */
 public abstract class AbstractEncoder<T> implements Encoder<T> {
 
-	private List<MimeType> encodableMimeTypes = Collections.emptyList();
+	private final List<MimeType> encodableMimeTypes;
+
 
 	protected AbstractEncoder(MimeType... supportedMimeTypes) {
 		this.encodableMimeTypes = Arrays.asList(supportedMimeTypes);
@@ -43,12 +46,11 @@ public abstract class AbstractEncoder<T> implements Encoder<T> {
 	}
 
 	@Override
-	public boolean canEncode(ResolvableType elementType, MimeType mimeType, Object... hints) {
+	public boolean canEncode(ResolvableType elementType, @Nullable MimeType mimeType) {
 		if (mimeType == null) {
 			return true;
 		}
-		return this.encodableMimeTypes.stream().
-				anyMatch(mt -> mt.isCompatibleWith(mimeType));
+		return this.encodableMimeTypes.stream().anyMatch(candidate -> candidate.isCompatibleWith(mimeType));
 	}
 
 }

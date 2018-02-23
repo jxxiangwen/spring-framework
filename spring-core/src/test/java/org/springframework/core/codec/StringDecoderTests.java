@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,18 +16,22 @@
 
 package org.springframework.core.codec;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 import org.junit.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.test.TestSubscriber;
+import reactor.test.StepVerifier;
 
 import org.springframework.core.ResolvableType;
 import org.springframework.core.io.buffer.AbstractDataBufferAllocatingTestCase;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.util.MimeTypeUtils;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 /**
  * @author Sebastien Deleuze
@@ -36,82 +40,151 @@ import static org.junit.Assert.assertTrue;
  */
 public class StringDecoderTests extends AbstractDataBufferAllocatingTestCase {
 
-	private StringDecoder decoder = new StringDecoder();
+	private StringDecoder decoder = StringDecoder.allMimeTypes();
 
 
 	@Test
 	public void canDecode() {
-		assertTrue(this.decoder.canDecode(ResolvableType.forClass(String.class), MimeTypeUtils.TEXT_PLAIN));
-		assertTrue(this.decoder.canDecode(ResolvableType.forClass(String.class), MimeTypeUtils.TEXT_HTML));
-		assertTrue(this.decoder.canDecode(ResolvableType.forClass(String.class), MimeTypeUtils.APPLICATION_JSON));
-		assertFalse(this.decoder.canDecode(ResolvableType.forClass(Integer.class), MimeTypeUtils.TEXT_PLAIN));
-		assertFalse(this.decoder.canDecode(ResolvableType.forClass(Object.class), MimeTypeUtils.APPLICATION_JSON));
+		assertTrue(this.decoder.canDecode(ResolvableType.forClass(String.class),
+				MimeTypeUtils.TEXT_PLAIN));
+		assertTrue(this.decoder.canDecode(ResolvableType.forClass(String.class),
+				MimeTypeUtils.TEXT_HTML));
+		assertTrue(this.decoder.canDecode(ResolvableType.forClass(String.class),
+				MimeTypeUtils.APPLICATION_JSON));
+		assertFalse(this.decoder.canDecode(ResolvableType.forClass(Integer.class),
+				MimeTypeUtils.TEXT_PLAIN));
+		assertFalse(this.decoder.canDecode(ResolvableType.forClass(Object.class),
+				MimeTypeUtils.APPLICATION_JSON));
 	}
 
 	@Test
-	public void decode() throws InterruptedException {
-		this.decoder = new StringDecoder(false);
-		Flux<DataBuffer> source = Flux.just(stringBuffer("foo"), stringBuffer("bar"), stringBuffer("baz"));
-		Flux<String> output = this.decoder.decode(source, ResolvableType.forClass(String.class), null);
+	public void decodeMultibyteCharacter() {
+		String s = "üéø";
+		Flux<DataBuffer> source = toSingleByteDataBuffers(s);
 
-		TestSubscriber.subscribe(output)
-				.assertNoError()
-				.assertComplete()
-				.assertValues("foo", "bar", "baz");
+		Flux<String> output = this.decoder.decode(source, ResolvableType.forClass(String.class),
+				null, Collections.emptyMap());
+		StepVerifier.create(output)
+				.expectNext(s)
+				.verifyComplete();
+	}
+
+	private Flux<DataBuffer> toSingleByteDataBuffers(String s) {
+		byte[] bytes = s.getBytes(StandardCharsets.UTF_8);
+
+		List<DataBuffer> dataBuffers = new ArrayList<>();
+		for (byte b : bytes) {
+			dataBuffers.add(this.bufferFactory.wrap(new byte[]{b}));
+		}
+		return Flux.fromIterable(dataBuffers);
 	}
 
 	@Test
-	public void decodeNewLine() throws InterruptedException {
-		DataBuffer fooBar = stringBuffer("\nfoo\r\nbar\r");
-		DataBuffer baz = stringBuffer("\nbaz");
-		Flux<DataBuffer> source = Flux.just(fooBar, baz);
-		Flux<String> output = decoder.decode(source, ResolvableType.forClass(String.class), null);
+	public void decodeNewLine() {
+		Flux<DataBuffer> source = Flux.just(
+				stringBuffer("\r\nabc\n"),
+				stringBuffer("def"),
+				stringBuffer("ghi\r\n\n"),
+				stringBuffer("jkl"),
+				stringBuffer("mno\npqr\n"),
+				stringBuffer("stu"),
+				stringBuffer("vw"),
+				stringBuffer("xyz")
+		);
 
-		TestSubscriber.subscribe(output)
-				.assertNoError()
-				.assertComplete().assertValues("\n", "foo\r", "\n", "bar\r", "\n", "baz");
+		Flux<String> output = this.decoder.decode(source, ResolvableType.forClass(String.class),
+				null, Collections.emptyMap());
+
+		StepVerifier.create(output)
+				.expectNext("")
+				.expectNext("abc")
+				.expectNext("defghi")
+				.expectNext("")
+				.expectNext("jklmno")
+				.expectNext("pqr")
+				.expectNext("stuvwxyz")
+				.expectComplete()
+				.verify();
 	}
 
 	@Test
-	public void decodeEmptyFlux() throws InterruptedException {
+	public void decodeNewLineIncludeDelimiters() {
+
+		decoder = StringDecoder.allMimeTypes(StringDecoder.DEFAULT_DELIMITERS, false);
+
+		Flux<DataBuffer> source = Flux.just(
+				stringBuffer("\r\nabc\n"),
+				stringBuffer("def"),
+				stringBuffer("ghi\r\n\n"),
+				stringBuffer("jkl"),
+				stringBuffer("mno\npqr\n"),
+				stringBuffer("stu"),
+				stringBuffer("vw"),
+				stringBuffer("xyz")
+		);
+
+		Flux<String> output = this.decoder.decode(source, ResolvableType.forClass(String.class),
+				null, Collections.emptyMap());
+
+		StepVerifier.create(output)
+				.expectNext("\r\n")
+				.expectNext("abc\n")
+				.expectNext("defghi\r\n")
+				.expectNext("\n")
+				.expectNext("jklmno\n")
+				.expectNext("pqr\n")
+				.expectNext("stuvwxyz")
+				.expectComplete()
+				.verify();
+	}
+
+	@Test
+	public void decodeEmptyFlux() {
 		Flux<DataBuffer> source = Flux.empty();
-		Flux<String> output = this.decoder.decode(source, ResolvableType.forClass(String.class), null);
+		Flux<String> output = this.decoder.decode(source, ResolvableType.forClass(String.class),
+				null, Collections.emptyMap());
 
-		TestSubscriber.subscribe(output)
-				.assertNoError()
-				.assertComplete()
-				.assertNoValues();
+		StepVerifier.create(output)
+				.expectNextCount(0)
+				.expectComplete()
+				.verify();
+
 	}
 
 	@Test
-	public void decodeEmptyString() throws InterruptedException {
+	public void decodeEmptyDataBuffer() {
 		Flux<DataBuffer> source = Flux.just(stringBuffer(""));
-		Flux<String> output = this.decoder.decode(source, ResolvableType.forClass(String.class), null);
+		Flux<String> output = this.decoder.decode(source,
+				ResolvableType.forClass(String.class), null, Collections.emptyMap());
 
-		TestSubscriber.subscribe(output).assertValues("");
+		StepVerifier.create(output)
+				.expectNext("")
+				.expectComplete().verify();
+
 	}
 
 	@Test
-	public void decodeToMono() throws InterruptedException {
-		this.decoder = new StringDecoder(false);
+	public void decodeToMono() {
 		Flux<DataBuffer> source = Flux.just(stringBuffer("foo"), stringBuffer("bar"), stringBuffer("baz"));
-		Mono<String> output = this.decoder.decodeToMono(source, ResolvableType.forClass(String.class), null);
+		Mono<String> output = this.decoder.decodeToMono(source,
+				ResolvableType.forClass(String.class), null, Collections.emptyMap());
 
-		TestSubscriber.subscribe(output)
-				.assertNoError()
-				.assertComplete()
-				.assertValues("foobarbaz");
+		StepVerifier.create(output)
+				.expectNext("foobarbaz")
+				.expectComplete()
+				.verify();
 	}
 
 	@Test
 	public void decodeToMonoWithEmptyFlux() throws InterruptedException {
 		Flux<DataBuffer> source = Flux.empty();
-		Mono<String> output = this.decoder.decodeToMono(source, ResolvableType.forClass(String.class), null);
+		Mono<String> output = this.decoder.decodeToMono(source,
+				ResolvableType.forClass(String.class), null, Collections.emptyMap());
 
-		TestSubscriber.subscribe(output)
-				.assertNoError()
-				.assertComplete()
-				.assertNoValues();
+		StepVerifier.create(output)
+				.expectNextCount(0)
+				.expectComplete()
+				.verify();
 	}
 
 }
