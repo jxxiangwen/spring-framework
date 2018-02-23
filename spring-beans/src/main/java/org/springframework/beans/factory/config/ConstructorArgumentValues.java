@@ -428,10 +428,17 @@ public class ConstructorArgumentValues {
 	 */
 	public static class ValueHolder implements BeanMetadataElement {
 
+		/**
+		 * the argument value
+		 */
 		private Object value;
-
+		/**
+		 * the type of the constructor argument
+		 */
 		private String type;
-
+		/**
+		 * the name of the constructor argument
+		 */
 		private String name;
 
 		private Object source;

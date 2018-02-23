@@ -72,6 +72,7 @@ final class SimpleStreamingClientHttpRequest extends AbstractClientHttpRequest {
 			if (this.outputStreaming) {
 				int contentLength = (int) headers.getContentLength();
 				if (contentLength >= 0) {
+					// 固定长度流
 					this.connection.setFixedLengthStreamingMode(contentLength);
 				}
 				else {

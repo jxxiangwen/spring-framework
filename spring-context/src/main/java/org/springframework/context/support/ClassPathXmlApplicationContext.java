@@ -51,7 +51,9 @@ import org.springframework.util.Assert;
 // 学习spring从这个类开始
 public class ClassPathXmlApplicationContext extends AbstractXmlApplicationContext {
 
-    // 配置文件资源对象数组
+    /**
+     * 配置文件资源对象数组
+     */
     private Resource[] configResources;
 
 

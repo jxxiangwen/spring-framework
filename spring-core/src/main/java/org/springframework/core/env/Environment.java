@@ -68,9 +68,12 @@ package org.springframework.core.env;
  * @see org.springframework.context.ConfigurableApplicationContext#setEnvironment
  * @see org.springframework.context.support.AbstractApplicationContext#createEnvironment
  */
+// 用于profile相关
 public interface Environment extends PropertyResolver {
 
 	/**
+	 * 可以通过spring.profiles.active设置或者通过{@link ConfigurableEnvironment#setActiveProfiles(String...)}
+	 * 设置，如果没设置，采用{@linkplain #getDefaultProfiles()}
 	 * Return the set of profiles explicitly made active for this environment. Profiles
 	 * are used for creating logical groupings of bean definitions to be registered
 	 * conditionally, for example based on deployment environment.  Profiles can be

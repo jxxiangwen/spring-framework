@@ -233,6 +233,7 @@ public class AutowiredAnnotationBeanPostProcessor extends InstantiationAwareBean
 	@Override
 	public void postProcessMergedBeanDefinition(RootBeanDefinition beanDefinition, Class<?> beanType, String beanName) {
 		if (beanType != null) {
+			// 在filed和method上查找注解并放入缓存
 			InjectionMetadata metadata = findAutowiringMetadata(beanName, beanType, null);
 			metadata.checkConfigMembers(beanDefinition);
 		}
@@ -392,6 +393,7 @@ public class AutowiredAnnotationBeanPostProcessor extends InstantiationAwareBean
 						metadata.clear(pvs);
 					}
 					try {
+						// 在filed和method上查找注解
 						metadata = buildAutowiringMetadata(clazz);
 						this.injectionMetadataCache.put(cacheKey, metadata);
 					}
@@ -412,7 +414,7 @@ public class AutowiredAnnotationBeanPostProcessor extends InstantiationAwareBean
 		do {
 			final LinkedList<InjectionMetadata.InjectedElement> currElements =
 					new LinkedList<>();
-
+			// 查找filed上的注解
 			ReflectionUtils.doWithLocalFields(targetClass, new ReflectionUtils.FieldCallback() {
 				@Override
 				public void doWith(Field field) throws IllegalArgumentException, IllegalAccessException {
@@ -429,7 +431,7 @@ public class AutowiredAnnotationBeanPostProcessor extends InstantiationAwareBean
 					}
 				}
 			});
-
+			// 查找method上的注解
 			ReflectionUtils.doWithLocalMethods(targetClass, new ReflectionUtils.MethodCallback() {
 				@Override
 				public void doWith(Method method) throws IllegalArgumentException, IllegalAccessException {

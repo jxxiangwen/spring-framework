@@ -511,6 +511,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
         this.parent = parent;
         if (parent != null) {
             Environment parentEnvironment = parent.getEnvironment();
+            // 如果parent可配置，则合并
             if (parentEnvironment instanceof ConfigurableEnvironment) {
                 getEnvironment().merge((ConfigurableEnvironment) parentEnvironment);
             }

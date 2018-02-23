@@ -52,7 +52,8 @@ public interface BeanDefinitionRegistry extends AliasRegistry {
 	 * Must support RootBeanDefinition and ChildBeanDefinition.
 	 * @param beanName the name of the bean instance to register
 	 * @param beanDefinition definition of the bean instance to register
-	 * @throws BeanDefinitionStoreException if the BeanDefinition is invalid
+	 * @throws BeanDefinitionStoreException BeanDefinition错误或者已经存在
+	 * if the BeanDefinition is invalid
 	 * or if there is already a BeanDefinition for the specified bean name
 	 * (and we are not allowed to override it)
 	 * @see RootBeanDefinition

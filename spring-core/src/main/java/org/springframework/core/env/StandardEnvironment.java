@@ -28,6 +28,7 @@ package org.springframework.core.env;
  * <li>{@linkplain AbstractEnvironment#getSystemEnvironment() system environment variables}
  * </ul>
  *
+ * 因为system properties绑定到一个虚拟机，而 environment.getProperty可以跨虚拟机，所以前者优先级高
  * That is, if the key "xyz" is present both in the JVM system properties as well as in
  * the set of environment variables for the current process, the value of key "xyz" from
  * system properties will return from a call to {@code environment.getProperty("xyz")}.
@@ -51,6 +52,7 @@ package org.springframework.core.env;
  * @see SystemEnvironmentPropertySource
  * @see org.springframework.web.context.support.StandardServletEnvironment
  */
+// 默认包含系统env和property
 public class StandardEnvironment extends AbstractEnvironment {
 
 	/** System environment property source name: {@value} */

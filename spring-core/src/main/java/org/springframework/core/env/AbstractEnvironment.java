@@ -327,6 +327,7 @@ public abstract class AbstractEnvironment implements ConfigurableEnvironment {
 	public boolean acceptsProfiles(String... profiles) {
 		Assert.notEmpty(profiles, "Must specify at least one profile");
 		for (String profile : profiles) {
+			// 检查！
 			if (StringUtils.hasLength(profile) && profile.charAt(0) == '!') {
 				if (!isProfileActive(profile.substring(1))) {
 					return true;
@@ -463,6 +464,7 @@ public abstract class AbstractEnvironment implements ConfigurableEnvironment {
 		String[] parentDefaultProfiles = parent.getDefaultProfiles();
 		if (!ObjectUtils.isEmpty(parentDefaultProfiles)) {
 			synchronized (this.defaultProfiles) {
+			    // 删除自己的默认
 				this.defaultProfiles.remove(RESERVED_DEFAULT_PROFILE_NAME);
 				for (String profile : parentDefaultProfiles) {
 					this.defaultProfiles.add(profile);

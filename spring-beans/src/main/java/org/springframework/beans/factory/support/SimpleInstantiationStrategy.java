@@ -58,12 +58,15 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
 	@Override
 	public Object instantiate(RootBeanDefinition bd, String beanName, BeanFactory owner) {
 		// Don't override the class with CGLIB if no overrides.
+		// Bean定义中没有方法覆盖
 		if (bd.getMethodOverrides().isEmpty()) {
 			// 选择一个使用的构造函数
 			Constructor<?> constructorToUse;
 			synchronized (bd.constructorArgumentLock) {
+				// 获取指定的构造器或生成对象的工厂方法
 				constructorToUse = (Constructor<?>) bd.resolvedConstructorOrFactoryMethod;
 				if (constructorToUse == null) {
+					// 获取class对象
 					final Class<?> clazz = bd.getBeanClass();
 					// 不能实例化接口
 					if (clazz.isInterface()) {
@@ -79,6 +82,7 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
 							});
 						}
 						else {
+							// 获取构造函数
 							constructorToUse =	clazz.getDeclaredConstructor((Class[]) null);
 						}
 						bd.resolvedConstructorOrFactoryMethod = constructorToUse;
@@ -92,6 +96,7 @@ public class SimpleInstantiationStrategy implements InstantiationStrategy {
 			return BeanUtils.instantiateClass(constructorToUse);
 		}
 		else {
+			// 使用CGLIB来实例化对象
 			// Must generate CGLIB subclass.
 			return instantiateWithMethodInjection(bd, beanName, owner);
 		}

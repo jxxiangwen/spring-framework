@@ -41,20 +41,21 @@ import java.util.Map;
  *   myMap.put("xyz", "myValue");
  *   propertySources.addFirst(new MapPropertySource("MY_MAP", myMap));
  * </pre>
- *
+ * 移除系统属性
  * <h4>Example: removing the default system properties property source</h4>
  * <pre class="code">
  *   MutablePropertySources propertySources = environment.getPropertySources();
  *   propertySources.remove(StandardEnvironment.SYSTEM_PROPERTIES_PROPERTY_SOURCE_NAME)
  * </pre>
  *
+ * mock 系统属性
  * <h4>Example: mocking the system environment for testing purposes</h4>
  * <pre class="code">
  *   MutablePropertySources propertySources = environment.getPropertySources();
  *   MockPropertySource mockEnvVars = new MockPropertySource().withProperty("xyz", "myValue");
  *   propertySources.replace(StandardEnvironment.SYSTEM_ENVIRONMENT_PROPERTY_SOURCE_NAME, mockEnvVars);
  * </pre>
- *
+ * 如果Environment在ApplicationContext中使用，PropertySource在在refresh函数之前执行
  * When an {@link Environment} is being used by an {@code ApplicationContext}, it is
  * important that any such {@code PropertySource} manipulations be performed
  * <em>before</em> the context's {@link
@@ -77,6 +78,7 @@ public interface ConfigurableEnvironment extends Environment, ConfigurableProper
 	 * evaluated during container bootstrap to determine whether bean definitions
 	 * should be registered with the container.
 	 * <p>Any existing active profiles will be replaced with the given arguments; call
+	 * 不带参数会清空激活的profile
 	 * with zero arguments to clear the current set of active profiles. Use
 	 * {@link #addActiveProfile} to add a profile while preserving the existing set.
 	 * @see #addActiveProfile
@@ -103,6 +105,7 @@ public interface ConfigurableEnvironment extends Environment, ConfigurableProper
 	void setDefaultProfiles(String... profiles);
 
 	/**
+	 * 返回的是对象保存的PropertySources 可以修改
 	 * Return the {@link PropertySources} for this {@code Environment} in mutable form,
 	 * allowing for manipulation of the set of {@link PropertySource} objects that should
 	 * be searched when resolving properties against this {@code Environment} object.
@@ -159,6 +162,7 @@ public interface ConfigurableEnvironment extends Environment, ConfigurableProper
 	 * e.g. system environment and system properties.
 	 * <p>Active and default profile names are also filtered for duplicates, to avoid
 	 * confusion and redundant storage.
+	 * 父环境merge后修改的信息并不会在子环境中体现
 	 * <p>The parent environment remains unmodified in any case. Note that any changes to
 	 * the parent environment occurring after the call to {@code merge} will not be
 	 * reflected in the child. Therefore, care should be taken to configure parent
@@ -167,6 +171,7 @@ public interface ConfigurableEnvironment extends Environment, ConfigurableProper
 	 * @since 3.1.2
 	 * @see org.springframework.context.support.AbstractApplicationContext#setParent
 	 */
+	// 添加active profiles, default profiles and property sources
 	void merge(ConfigurableEnvironment parent);
 
 }

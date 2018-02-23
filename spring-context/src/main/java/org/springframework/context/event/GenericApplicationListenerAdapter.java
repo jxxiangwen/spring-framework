@@ -24,6 +24,8 @@ import org.springframework.core.ResolvableType;
 import org.springframework.util.Assert;
 
 /**
+ * 用来将没有实现GenericApplicationListener接口的监听器适配成实现GenericApplicationListener接口
+ * 这样可以使用supportsEventType来判断监听器接受的事件类型
  * {@link GenericApplicationListener} adapter that determines supported event types
  * through introspecting the generically declared type of the target listener.
  *
@@ -47,6 +49,7 @@ public class GenericApplicationListenerAdapter implements GenericApplicationList
 	public GenericApplicationListenerAdapter(ApplicationListener<?> delegate) {
 		Assert.notNull(delegate, "Delegate listener must not be null");
 		this.delegate = (ApplicationListener<ApplicationEvent>) delegate;
+		// 解析申明的监听事件类
 		this.declaredEventType = resolveDeclaredEventType(this.delegate);
 	}
 
@@ -89,15 +92,28 @@ public class GenericApplicationListenerAdapter implements GenericApplicationList
 	}
 
 
+	/**
+	 * 解析申明的监听事件类
+	 * @param listenerType 监听器类型
+	 * @return 申明的监听事件类
+	 */
 	static ResolvableType resolveDeclaredEventType(Class<?> listenerType) {
+		// 查找实现了ApplicationListener的接口
 		ResolvableType resolvableType = ResolvableType.forClass(listenerType).as(ApplicationListener.class);
 		if (resolvableType == null || !resolvableType.hasGenerics()) {
+			// 没有实现泛型接口
 			return null;
 		}
 		return resolvableType.getGeneric();
 	}
 
+	/**
+	 * 解析申明的监听事件类
+	 * @param listener 监听器
+	 * @return 申明的监听事件类
+	 */
 	private static ResolvableType resolveDeclaredEventType(ApplicationListener<ApplicationEvent> listener) {
+		// 解析申明的监听事件类
 		ResolvableType declaredEventType = resolveDeclaredEventType(listener.getClass());
 		if (declaredEventType == null || declaredEventType.isAssignableFrom(
 				ResolvableType.forClass(ApplicationEvent.class))) {

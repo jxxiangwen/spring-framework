@@ -134,13 +134,17 @@ public class SimpleClientHttpRequestFactory implements ClientHttpRequestFactory,
 
 	@Override
 	public ClientHttpRequest createRequest(URI uri, HttpMethod httpMethod) throws IOException {
+		// 获取连接
 		HttpURLConnection connection = openConnection(uri.toURL(), this.proxy);
+		// 设置connection的准备,比如超时,inputStream和OutputStream,method等待
 		prepareConnection(connection, httpMethod.name());
 
 		if (this.bufferRequestBody) {
+		    // 使用缓冲
 			return new SimpleBufferingClientHttpRequest(connection, this.outputStreaming);
 		}
 		else {
+		    // 使用流
 			return new SimpleStreamingClientHttpRequest(connection, this.chunkSize, this.outputStreaming);
 		}
 	}
@@ -177,6 +181,7 @@ public class SimpleClientHttpRequestFactory implements ClientHttpRequestFactory,
 	 * @throws IOException in case of I/O errors
 	 */
 	protected HttpURLConnection openConnection(URL url, Proxy proxy) throws IOException {
+		// 打开连接
 		URLConnection urlConnection = (proxy != null ? url.openConnection(proxy) : url.openConnection());
 		Assert.isInstanceOf(HttpURLConnection.class, urlConnection);
 		return (HttpURLConnection) urlConnection;
@@ -190,6 +195,7 @@ public class SimpleClientHttpRequestFactory implements ClientHttpRequestFactory,
 	 * @throws IOException in case of I/O errors
 	 */
 	protected void prepareConnection(HttpURLConnection connection, String httpMethod) throws IOException {
+		// 设置超时
 		if (this.connectTimeout >= 0) {
 			connection.setConnectTimeout(this.connectTimeout);
 		}
@@ -197,9 +203,13 @@ public class SimpleClientHttpRequestFactory implements ClientHttpRequestFactory,
 			connection.setReadTimeout(this.readTimeout);
 		}
 
+		// httpUrlConnection.setDoInput(true);以后就可以使用conn.getInputStream().read();
+		// 所有都需要响应,因此都需要设置
 		connection.setDoInput(true);
 
 		if ("GET".equals(httpMethod)) {
+			// 设置成true，系统自动处理重定向；设置成false，则需要自己从http reply中分析新的url
+			// 自己重新连接。
 			connection.setInstanceFollowRedirects(true);
 		}
 		else {
@@ -208,12 +218,15 @@ public class SimpleClientHttpRequestFactory implements ClientHttpRequestFactory,
 
 		if ("POST".equals(httpMethod) || "PUT".equals(httpMethod) ||
 				"PATCH".equals(httpMethod) || "DELETE".equals(httpMethod)) {
+			// httpUrlConnection.setDoOutput(true);以后就可以使用conn.getOutputStream().write()
+			// 上面这些method内容都写在body里面,因此需要OutputStream
 			connection.setDoOutput(true);
 		}
 		else {
 			connection.setDoOutput(false);
 		}
 
+		// set method
 		connection.setRequestMethod(httpMethod);
 	}
 

@@ -30,7 +30,7 @@ import org.apache.commons.logging.LogFactory;
  * {@code ${name}}. Using {@code PropertyPlaceholderHelper} these placeholders can be substituted for
  * user-supplied values. <p> Values for substitution can be supplied using a {@link Properties} instance or
  * using a {@link PlaceholderResolver}.
- *
+ * 解析占位符
  * @author Juergen Hoeller
  * @author Rob Harrop
  * @since 3.0

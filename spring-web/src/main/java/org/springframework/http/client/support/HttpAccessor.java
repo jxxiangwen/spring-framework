@@ -74,6 +74,7 @@ public abstract class HttpAccessor {
 	 * @throws IOException in case of I/O errors
 	 */
 	protected ClientHttpRequest createRequest(URI url, HttpMethod method) throws IOException {
+		// SimpleClientHttpRequestFactory
 		ClientHttpRequest request = getRequestFactory().createRequest(url, method);
 		if (logger.isDebugEnabled()) {
 			logger.debug("Created " + method.name() + " request for \"" + url + "\"");

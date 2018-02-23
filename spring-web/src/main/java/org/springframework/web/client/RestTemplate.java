@@ -280,6 +280,7 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
 
 	@Override
 	public <T> T getForObject(String url, Class<T> responseType, Object... urlVariables) throws RestClientException {
+		// 设置返回类型 responseType
 		RequestCallback requestCallback = acceptHeaderRequestCallback(responseType);
 		HttpMessageConverterExtractor<T> responseExtractor =
 				new HttpMessageConverterExtractor<>(responseType, getMessageConverters(), logger);
@@ -575,6 +576,7 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
 	public <T> T execute(String url, HttpMethod method, RequestCallback requestCallback,
 			ResponseExtractor<T> responseExtractor, Object... urlVariables) throws RestClientException {
 
+	    // 获取url
 		URI expanded = getUriTemplateHandler().expand(url, urlVariables);
 		return doExecute(expanded, method, requestCallback, responseExtractor);
 	}
@@ -604,6 +606,7 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
 	 * @param responseExtractor object that extracts the return value from the response (can be {@code null})
 	 * @return an arbitrary object, as returned by the {@link ResponseExtractor}
 	 */
+	// 按照给定的method执行url
 	protected <T> T doExecute(URI url, HttpMethod method, RequestCallback requestCallback,
 			ResponseExtractor<T> responseExtractor) throws RestClientException {
 
@@ -611,13 +614,18 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
 		Assert.notNull(method, "'method' must not be null");
 		ClientHttpResponse response = null;
 		try {
+		    // 创建request,包括设置好timeout和输入输出stream
 			ClientHttpRequest request = createRequest(url, method);
 			if (requestCallback != null) {
+                // set Accept
 				requestCallback.doWithRequest(request);
 			}
+			// 执行请求
 			response = request.execute();
+			// 错误处理
 			handleResponse(url, method, response);
 			if (responseExtractor != null) {
+			    // 抽取响应
 				return responseExtractor.extractData(response);
 			}
 			else {
@@ -651,6 +659,7 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
 	 */
 	protected void handleResponse(URI url, HttpMethod method, ClientHttpResponse response) throws IOException {
 		ResponseErrorHandler errorHandler = getErrorHandler();
+		// 更新code判断是否有错误
 		boolean hasError = errorHandler.hasError(response);
 		if (logger.isDebugEnabled()) {
 			try {
@@ -720,12 +729,14 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
 
 		@Override
 		public void doWithRequest(ClientHttpRequest request) throws IOException {
+			// 没有返回类型什么也需要做
 			if (this.responseType != null) {
 				Class<?> responseClass = null;
 				if (this.responseType instanceof Class) {
 					responseClass = (Class<?>) this.responseType;
 				}
 				List<MediaType> allSupportedMediaTypes = new ArrayList<>();
+                // 通过支持的converter获取mediaType
 				for (HttpMessageConverter<?> converter : getMessageConverters()) {
 					if (responseClass != null) {
 						if (converter.canRead(responseClass, null)) {
@@ -739,6 +750,7 @@ public class RestTemplate extends InterceptingHttpAccessor implements RestOperat
 						}
 					}
 				}
+				// set Accept
 				if (!allSupportedMediaTypes.isEmpty()) {
 					MediaType.sortBySpecificity(allSupportedMediaTypes);
 					if (logger.isDebugEnabled()) {

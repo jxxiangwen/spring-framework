@@ -150,6 +150,7 @@ public abstract class AbstractApplicationEventMulticaster
 	}
 
 	/**
+	 * 返回监听eventType事件类型的监听器
 	 * Return a Collection of ApplicationListeners matching the given
 	 * event type. Non-matching listeners get excluded early.
 	 * @param event the event to be propagated. Allows for excluding
@@ -163,6 +164,7 @@ public abstract class AbstractApplicationEventMulticaster
 
 		Object source = event.getSource();
 		Class<?> sourceType = (source != null ? source.getClass() : null);
+		// 缓存key，用来通过eventType快速寻找监听器
 		ListenerCacheKey cacheKey = new ListenerCacheKey(eventType, sourceType);
 
 		// Quick check for existing entry on ConcurrentHashMap...
@@ -181,6 +183,7 @@ public abstract class AbstractApplicationEventMulticaster
 					return retriever.getApplicationListeners();
 				}
 				retriever = new ListenerRetriever(true);
+				// 根据事件类型查找监听器返回，同时retriever中也会保存下相应的监听器
 				Collection<ApplicationListener<?>> listeners =
 						retrieveApplicationListeners(eventType, sourceType, retriever);
 				this.retrieverCache.put(cacheKey, retriever);
@@ -194,6 +197,7 @@ public abstract class AbstractApplicationEventMulticaster
 	}
 
 	/**
+	 * 找出所有监听eventType的监听器返回，同时将符合的监听器加入retriever
 	 * Actually retrieve the application listeners for the given event and source type.
 	 * @param eventType the event type
 	 * @param sourceType the event source type
@@ -211,6 +215,7 @@ public abstract class AbstractApplicationEventMulticaster
 			listenerBeans = new LinkedHashSet<>(this.defaultRetriever.applicationListenerBeans);
 		}
 		for (ApplicationListener<?> listener : listeners) {
+			// 将支持eventType的监听器加入集合
 			if (supportsEvent(listener, eventType, sourceType)) {
 				if (retriever != null) {
 					retriever.applicationListeners.add(listener);
@@ -265,6 +270,7 @@ public abstract class AbstractApplicationEventMulticaster
 	}
 
 	/**
+	 * 检查监听器是否监听eventType
 	 * Determine whether the given listener supports the given event.
 	 * <p>The default implementation detects the {@link SmartApplicationListener}
 	 * and {@link GenericApplicationListener} interfaces. In case of a standard

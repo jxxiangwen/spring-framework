@@ -63,24 +63,31 @@ public abstract class AbstractBeanDefinition extends BeanMetadataAttributeAccess
 
 	/**
 	 * Constant that indicates no autowiring at all.
+	 * 容器默认的自动绑定模式,也就是不采用任何形式的自动绑定,完全依赖手工明确配置各个bean之间的依赖关系
 	 * @see #setAutowireMode
 	 */
 	public static final int AUTOWIRE_NO = AutowireCapableBeanFactory.AUTOWIRE_NO;
 
 	/**
 	 * Constant that indicates autowiring bean properties by name.
+	 * 按照类中声明的实例变量的名称,与XML配置文件中声明的bean定义的beanName的值进行匹配,
+	 * 相匹配的bean定义将被自动绑定到当前实例变量上。
 	 * @see #setAutowireMode
 	 */
 	public static final int AUTOWIRE_BY_NAME = AutowireCapableBeanFactory.AUTOWIRE_BY_NAME;
 
 	/**
 	 * Constant that indicates autowiring bean properties by type.
+	 * 容器会根据当前bean定义类型,分析其相应的依赖对象类型,然后到容器所管理的所有bean定义中
+	 * 寻找与依赖对象类型相同的bean定义,然后将找到的符合条件的bean自动绑定到当前bean定义
 	 * @see #setAutowireMode
 	 */
 	public static final int AUTOWIRE_BY_TYPE = AutowireCapableBeanFactory.AUTOWIRE_BY_TYPE;
 
 	/**
 	 * Constant that indicates autowiring a constructor.
+	 * 针对构造方法参数的类型而进行的自动绑定,它同样是byType 类型的绑定模式。
+	 * constructor是匹配构造方法的参数类型,而不是实例属性的类型。
 	 * @see #setAutowireMode
 	 */
 	public static final int AUTOWIRE_CONSTRUCTOR = AutowireCapableBeanFactory.AUTOWIRE_CONSTRUCTOR;
@@ -88,27 +95,36 @@ public abstract class AbstractBeanDefinition extends BeanMetadataAttributeAccess
 	/**
 	 * Constant that indicates determining an appropriate autowire strategy
 	 * through introspection of the bean class.
+	 * byType 和constructor模式的结合体,如果对象拥有默认无参数的构造方法,容器会优先考虑 byType的自动绑定模式。
+	 * 否则,会使用constructor模式。当然,如果通过构造方法注入绑定后还有其他属性没有绑定,容器也会使用
+	 * byType对剩余的对象属性进行自动绑定。
 	 * @see #setAutowireMode
 	 * @deprecated as of Spring 3.0: If you are using mixed autowiring strategies,
 	 * use annotation-based autowiring for clearer demarcation of autowiring needs.
+	 * 3.0之后添加了基于注解的注入，可以替代此方式
 	 */
 	@Deprecated
 	public static final int AUTOWIRE_AUTODETECT = AutowireCapableBeanFactory.AUTOWIRE_AUTODETECT;
 
 	/**
 	 * Constant that indicates no dependency check at all.
+	 * 不做依赖检查。默认值
 	 * @see #setDependencyCheck
 	 */
 	public static final int DEPENDENCY_CHECK_NONE = 0;
 
 	/**
 	 * Constant that indicates dependency checking for object references.
+	 * 只对对象引用类型依赖进行检查
 	 * @see #setDependencyCheck
 	 */
 	public static final int DEPENDENCY_CHECK_OBJECTS = 1;
 
 	/**
 	 * Constant that indicates dependency checking for "simple" properties.
+	 * 容器会对简单属性类型以及相关的collection进行依赖检查,对象引用类型的依赖除外
+	 * 包括八种简单类型及其包装类.Enum.CharSequence.Number.Date.URI.URL.Locale.Class
+	 * 及以上类型的数组
 	 * @see #setDependencyCheck
 	 * @see org.springframework.beans.BeanUtils#isSimpleProperty
 	 */
@@ -137,11 +153,18 @@ public abstract class AbstractBeanDefinition extends BeanMetadataAttributeAccess
 	private volatile Object beanClass;
 
 	private String scope = SCOPE_DEFAULT;
-
+	/**
+	 * 抽象标志，为true不会实例化
+	 */
 	private boolean abstractFlag = false;
-
+	/**
+	 * 主要是可以针对 ApplicationContext容器的bean初始化行为施以更多控制。与BeanFactory不同,
+	 * ApplicationContext在容器启动的时候,就会马上对所有的“singleton的bean定义”进行实例化操作
+	 */
 	private boolean lazyInit = false;
-
+	/**
+	 * 自动绑定只应用于"原生类型、String类型以及Classes类型以外"的对象类型
+	 */
 	private int autowireMode = AUTOWIRE_NO;
 
 	private int dependencyCheck = DEPENDENCY_CHECK_NONE;
