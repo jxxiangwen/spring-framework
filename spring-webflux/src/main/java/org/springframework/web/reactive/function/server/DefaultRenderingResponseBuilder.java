@@ -49,7 +49,7 @@ import org.springframework.web.server.ServerWebExchange;
  * @author Juergen Hoeller
  * @since 5.0
  */
-class DefaultRenderingResponseBuilder implements RenderingResponse.Builder {
+final class DefaultRenderingResponseBuilder implements RenderingResponse.Builder {
 
 	private final String name;
 
@@ -63,6 +63,7 @@ class DefaultRenderingResponseBuilder implements RenderingResponse.Builder {
 
 
 	public DefaultRenderingResponseBuilder(RenderingResponse other) {
+		Assert.notNull(other, "RenderingResponse must not be null");
 		this.name = other.name();
 		this.status = (other instanceof DefaultRenderingResponse ?
 				((DefaultRenderingResponse) other).statusCode : other.statusCode().value());
@@ -71,6 +72,7 @@ class DefaultRenderingResponseBuilder implements RenderingResponse.Builder {
 	}
 
 	public DefaultRenderingResponseBuilder(String name) {
+		Assert.notNull(name, "Name must not be null");
 		this.name = name;
 	}
 
@@ -97,7 +99,6 @@ class DefaultRenderingResponseBuilder implements RenderingResponse.Builder {
 
 	@Override
 	public RenderingResponse.Builder cookies(Consumer<MultiValueMap<String, ResponseCookie>> cookiesConsumer) {
-		Assert.notNull(cookiesConsumer, "Consumer must not be null");
 		cookiesConsumer.accept(this.cookies);
 		return this;
 	}
@@ -184,19 +185,20 @@ class DefaultRenderingResponseBuilder implements RenderingResponse.Builder {
 
 		@Override
 		protected Mono<Void> writeToInternal(ServerWebExchange exchange, Context context) {
-			MediaType responseContentType = exchange.getResponse().getHeaders().getContentType();
+			MediaType contentType = exchange.getResponse().getHeaders().getContentType();
 			Locale locale = LocaleContextHolder.getLocale(exchange.getLocaleContext());
 			Stream<ViewResolver> viewResolverStream = context.viewResolvers().stream();
 
 			return Flux.fromStream(viewResolverStream)
 					.concatMap(viewResolver -> viewResolver.resolveViewName(name(), locale))
 					.next()
-					.switchIfEmpty(Mono.error(new IllegalArgumentException("Could not resolve view with name '" +
-							name() +"'")))
+					.switchIfEmpty(Mono.error(() ->
+							new IllegalArgumentException("Could not resolve view with name '" + name() + "'")))
 					.flatMap(view -> {
 						List<MediaType> mediaTypes = view.getSupportedMediaTypes();
-						MediaType contentType = (responseContentType == null && !mediaTypes.isEmpty() ? mediaTypes.get(0) : responseContentType);
-						return view.render(model(), contentType, exchange);
+						return view.render(model(),
+								contentType == null && !mediaTypes.isEmpty() ? mediaTypes.get(0) : contentType,
+								exchange);
 					});
 		}
 

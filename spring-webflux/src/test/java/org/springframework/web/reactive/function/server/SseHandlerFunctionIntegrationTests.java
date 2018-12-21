@@ -31,7 +31,6 @@ import org.springframework.web.reactive.function.client.WebClient;
 
 import static org.junit.Assert.*;
 import static org.springframework.http.MediaType.*;
-import static org.springframework.web.reactive.function.BodyExtractors.*;
 import static org.springframework.web.reactive.function.BodyInserters.*;
 import static org.springframework.web.reactive.function.server.RouterFunctions.*;
 
@@ -43,6 +42,12 @@ public class SseHandlerFunctionIntegrationTests extends AbstractRouterFunctionIn
 	private WebClient webClient;
 
 
+	@Before
+	public void setup() throws Exception {
+		super.setup();
+		this.webClient = WebClient.create("http://localhost:" + this.port);
+	}
+
 	@Override
 	protected RouterFunction<?> routerFunction() {
 		SseHandler sseHandler = new SseHandler();
@@ -51,20 +56,14 @@ public class SseHandlerFunctionIntegrationTests extends AbstractRouterFunctionIn
 				.and(route(RequestPredicates.GET("/event"), sseHandler::sse));
 	}
 
-	@Before
-	public void setup() throws Exception {
-		super.setup();
-		this.webClient = WebClient.create("http://localhost:" + this.port);
-	}
-
 
 	@Test
 	public void sseAsString() {
 		Flux<String> result = this.webClient.get()
 				.uri("/string")
 				.accept(TEXT_EVENT_STREAM)
-				.exchange()
-				.flatMapMany(response -> response.body(toFlux(String.class)));
+				.retrieve()
+				.bodyToFlux(String.class);
 
 		StepVerifier.create(result)
 				.expectNext("foo 0")
@@ -78,8 +77,8 @@ public class SseHandlerFunctionIntegrationTests extends AbstractRouterFunctionIn
 		Flux<Person> result = this.webClient.get()
 				.uri("/person")
 				.accept(TEXT_EVENT_STREAM)
-				.exchange()
-				.flatMapMany(response -> response.body(toFlux(Person.class)));
+				.retrieve()
+				.bodyToFlux(Person.class);
 
 		StepVerifier.create(result)
 				.expectNext(new Person("foo 0"))
@@ -93,9 +92,8 @@ public class SseHandlerFunctionIntegrationTests extends AbstractRouterFunctionIn
 		Flux<ServerSentEvent<String>> result = this.webClient.get()
 				.uri("/event")
 				.accept(TEXT_EVENT_STREAM)
-				.exchange()
-				.flatMapMany(response -> response.body(toFlux(
-						new ParameterizedTypeReference<ServerSentEvent<String>>() {})));
+				.retrieve()
+				.bodyToFlux(new ParameterizedTypeReference<ServerSentEvent<String>>() {});
 
 		StepVerifier.create(result)
 				.consumeNextWith( event -> {
@@ -119,8 +117,7 @@ public class SseHandlerFunctionIntegrationTests extends AbstractRouterFunctionIn
 
 	private static class SseHandler {
 
-		private static final Flux<Long> INTERVAL = interval(Duration.ofMillis(100), 2);
-
+		private static final Flux<Long> INTERVAL = testInterval(Duration.ofMillis(100), 2);
 
 		Mono<ServerResponse> string(ServerRequest request) {
 			return ServerResponse.ok()

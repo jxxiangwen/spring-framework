@@ -32,11 +32,13 @@ import org.springframework.util.StringUtils;
 import org.springframework.util.xml.DomUtils;
 
 /**
+ * Internal utility methods used with JDBC configuration.
+ *
  * @author Juergen Hoeller
  * @author Stephane Nicoll
  * @since 3.1
  */
-class DatabasePopulatorConfigUtils {
+abstract class DatabasePopulatorConfigUtils {
 
 	public static void setDatabasePopulator(Element element, BeanDefinitionBuilder builder) {
 		List<Element> scripts = DomUtils.getChildElementsByTagName(element, "script");
@@ -46,7 +48,7 @@ class DatabasePopulatorConfigUtils {
 		}
 	}
 
-	static private BeanDefinition createDatabasePopulator(Element element, List<Element> scripts, String execution) {
+	private static BeanDefinition createDatabasePopulator(Element element, List<Element> scripts, String execution) {
 		BeanDefinitionBuilder builder = BeanDefinitionBuilder.genericBeanDefinition(CompositeDatabasePopulator.class);
 
 		boolean ignoreFailedDrops = element.getAttribute("ignore-failures").equals("DROPS");

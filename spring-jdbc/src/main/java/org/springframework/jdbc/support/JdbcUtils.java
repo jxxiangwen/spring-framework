@@ -37,6 +37,7 @@ import org.springframework.jdbc.CannotGetJdbcConnectionException;
 import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.lang.Nullable;
 import org.springframework.util.NumberUtils;
+import org.springframework.util.StringUtils;
 
 /**
  * Generic utility methods for working with JDBC. Mainly for internal use
@@ -296,19 +297,19 @@ public abstract class JdbcUtils {
 	}
 
 	/**
-	 * Extract database meta data via the given DatabaseMetaDataCallback.
-	 * <p>This method will open a connection to the database and retrieve the database metadata.
+	 * Extract database meta-data via the given DatabaseMetaDataCallback.
+	 * <p>This method will open a connection to the database and retrieve the database meta-data.
 	 * Since this method is called before the exception translation feature is configured for
 	 * a datasource, this method can not rely on the SQLException translation functionality.
 	 * <p>Any exceptions will be wrapped in a MetaDataAccessException. This is a checked exception
 	 * and any calling code should catch and handle this exception. You can just log the
 	 * error and hope for the best, but there is probably a more serious error that will
 	 * reappear when you try to access the database again.
-	 * @param dataSource the DataSource to extract metadata for
+	 * @param dataSource the DataSource to extract meta-data for
 	 * @param action callback that will do the actual work
 	 * @return object containing the extracted information, as returned by
 	 * the DatabaseMetaDataCallback's {@code processMetaData} method
-	 * @throws MetaDataAccessException if meta data access failed
+	 * @throws MetaDataAccessException if meta-data access failed
 	 */
 	public static Object extractDatabaseMetaData(DataSource dataSource, DatabaseMetaDataCallback action)
 			throws MetaDataAccessException {
@@ -324,7 +325,7 @@ public abstract class JdbcUtils {
 			return action.processMetaData(metaData);
 		}
 		catch (CannotGetJdbcConnectionException ex) {
-			throw new MetaDataAccessException("Could not get Connection for extracting meta data", ex);
+			throw new MetaDataAccessException("Could not get Connection for extracting meta-data", ex);
 		}
 		catch (SQLException ex) {
 			throw new MetaDataAccessException("Error while extracting DatabaseMetaData", ex);
@@ -341,7 +342,7 @@ public abstract class JdbcUtils {
 	/**
 	 * Call the specified method on DatabaseMetaData for the given DataSource,
 	 * and extract the invocation result.
-	 * @param dataSource the DataSource to extract meta data for
+	 * @param dataSource the DataSource to extract meta-data for
 	 * @param metaDataMethodName the name of the DatabaseMetaData method to call
 	 * @return the object returned by the specified DatabaseMetaData method
 	 * @throws MetaDataAccessException if we couldn't access the DatabaseMetaData
@@ -406,9 +407,10 @@ public abstract class JdbcUtils {
 	}
 
 	/**
-	 * Extract a common name for the database in use even if various drivers/platforms provide varying names.
-	 * @param source the name as provided in database metadata
-	 * @return the common name to be used
+	 * Extract a common name for the target database in use even if
+	 * various drivers/platforms provide varying names at runtime.
+	 * @param source the name as provided in database meta-data
+	 * @return the common name to be used (e.g. "DB2" or "Sybase")
 	 */
 	@Nullable
 	public static String commonDatabaseName(@Nullable String source) {
@@ -431,10 +433,10 @@ public abstract class JdbcUtils {
 	 * @return whether the type is numeric
 	 */
 	public static boolean isNumeric(int sqlType) {
-		return Types.BIT == sqlType || Types.BIGINT == sqlType || Types.DECIMAL == sqlType ||
+		return (Types.BIT == sqlType || Types.BIGINT == sqlType || Types.DECIMAL == sqlType ||
 				Types.DOUBLE == sqlType || Types.FLOAT == sqlType || Types.INTEGER == sqlType ||
 				Types.NUMERIC == sqlType || Types.REAL == sqlType || Types.SMALLINT == sqlType ||
-				Types.TINYINT == sqlType;
+				Types.TINYINT == sqlType);
 	}
 
 	/**
@@ -444,14 +446,14 @@ public abstract class JdbcUtils {
 	 * expressed in the JDBC 4.0 specification:
 	 * <p><i>columnLabel - the label for the column specified with the SQL AS clause.
 	 * If the SQL AS clause was not specified, then the label is the name of the column</i>.
-	 * @return the column name to use
-	 * @param resultSetMetaData the current meta data to use
+	 * @param resultSetMetaData the current meta-data to use
 	 * @param columnIndex the index of the column for the look up
+	 * @return the column name to use
 	 * @throws SQLException in case of lookup failure
 	 */
 	public static String lookupColumnName(ResultSetMetaData resultSetMetaData, int columnIndex) throws SQLException {
 		String name = resultSetMetaData.getColumnLabel(columnIndex);
-		if (name == null || name.length() < 1) {
+		if (!StringUtils.hasLength(name)) {
 			name = resultSetMetaData.getColumnName(columnIndex);
 		}
 		return name;

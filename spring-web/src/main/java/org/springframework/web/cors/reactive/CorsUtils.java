@@ -16,6 +16,8 @@
 
 package org.springframework.web.cors.reactive;
 
+import java.net.URI;
+
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.server.reactive.ServerHttpRequest;
@@ -49,9 +51,14 @@ public abstract class CorsUtils {
 	}
 
 	/**
-	 * Check if the request is a same-origin one, based on {@code Origin}, {@code Host},
-	 * {@code Forwarded}, {@code X-Forwarded-Proto}, {@code X-Forwarded-Host} and
-	 * @code X-Forwarded-Port} headers.
+	 * Check if the request is a same-origin one, based on {@code Origin}, and
+	 * {@code Host} headers.
+	 *
+	 * <p><strong>Note:</strong> as of 5.1 this method ignores
+	 * {@code "Forwarded"} and {@code "X-Forwarded-*"} headers that specify the
+	 * client-originated address. Consider using the {@code ForwardedHeaderFilter}
+	 * to extract and use, or to discard such headers.
+	 *
 	 * @return {@code true} if the request is a same-origin one, {@code false} in case
 	 * of a cross-origin request
 	 */
@@ -60,14 +67,18 @@ public abstract class CorsUtils {
 		if (origin == null) {
 			return true;
 		}
-		UriComponentsBuilder urlBuilder = UriComponentsBuilder.fromHttpRequest(request);
-		UriComponents actualUrl = urlBuilder.build();
-		String actualHost = actualUrl.getHost();
-		int actualPort = getPort(actualUrl.getScheme(), actualUrl.getPort());
+
+		URI uri = request.getURI();
+		String actualScheme = uri.getScheme();
+		String actualHost = uri.getHost();
+		int actualPort = getPort(uri.getScheme(), uri.getPort());
+		Assert.notNull(actualScheme, "Actual request scheme must not be null");
 		Assert.notNull(actualHost, "Actual request host must not be null");
 		Assert.isTrue(actualPort != -1, "Actual request port must not be undefined");
+
 		UriComponents originUrl = UriComponentsBuilder.fromOriginHeader(origin).build();
-		return (actualHost.equals(originUrl.getHost()) &&
+		return (actualScheme.equals(originUrl.getScheme()) &&
+				actualHost.equals(originUrl.getHost()) &&
 				actualPort == getPort(originUrl.getScheme(), originUrl.getPort()));
 	}
 

@@ -16,7 +16,6 @@
 
 package org.springframework.web.reactive.function.server;
 
-import java.nio.ByteBuffer;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -24,7 +23,6 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
-import java.util.function.BiFunction;
 
 import org.junit.Test;
 import org.reactivestreams.Publisher;
@@ -34,8 +32,6 @@ import reactor.test.StepVerifier;
 
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.codec.CharSequenceEncoder;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DefaultDataBufferFactory;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
@@ -44,16 +40,13 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.codec.EncoderHttpMessageWriter;
 import org.springframework.http.codec.HttpMessageWriter;
-import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.mock.http.server.reactive.test.MockServerHttpRequest;
 import org.springframework.mock.http.server.reactive.test.MockServerHttpResponse;
 import org.springframework.mock.web.test.server.MockServerWebExchange;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.reactive.function.BodyInserter;
 import org.springframework.web.reactive.result.view.ViewResolver;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.Assert.*;
 
 /**
@@ -62,21 +55,21 @@ import static org.junit.Assert.*;
 public class DefaultEntityResponseBuilderTests {
 
 	@Test
-	public void fromObject() throws Exception {
+	public void fromObject() {
 		String body = "foo";
 		EntityResponse<String> response = EntityResponse.fromObject(body).build().block();
 		assertSame(body, response.entity());
 	}
 
 	@Test
-	public void fromPublisherClass() throws Exception {
+	public void fromPublisherClass() {
 		Flux<String> body = Flux.just("foo", "bar");
 		EntityResponse<Flux<String>> response = EntityResponse.fromPublisher(body, String.class).build().block();
 		assertSame(body, response.entity());
 	}
 
 	@Test
-	public void fromPublisher() throws Exception {
+	public void fromPublisher() {
 		Flux<String> body = Flux.just("foo", "bar");
 		ParameterizedTypeReference<String> typeReference = new ParameterizedTypeReference<String>() {};
 		EntityResponse<Flux<String>> response = EntityResponse.fromPublisher(body, typeReference).build().block();
@@ -84,7 +77,7 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void status() throws Exception {
+	public void status() {
 		String body = "foo";
 		Mono<EntityResponse<String>> result = EntityResponse.fromObject(body).status(HttpStatus.CREATED).build();
 		StepVerifier.create(result)
@@ -94,7 +87,7 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void allow() throws Exception {
+	public void allow() {
 		String body = "foo";
 		Mono<EntityResponse<String>> result = EntityResponse.fromObject(body).allow(HttpMethod.GET).build();
 		Set<HttpMethod> expected = EnumSet.of(HttpMethod.GET);
@@ -105,7 +98,7 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void contentLength() throws Exception {
+	public void contentLength() {
 		String body = "foo";
 		Mono<EntityResponse<String>> result = EntityResponse.fromObject(body).contentLength(42).build();
 		StepVerifier.create(result)
@@ -115,7 +108,7 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void contentType() throws Exception {
+	public void contentType() {
 		String body = "foo";
 		Mono<EntityResponse<String>>
 				result = EntityResponse.fromObject(body).contentType(MediaType.APPLICATION_JSON).build();
@@ -126,7 +119,7 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void etag() throws Exception {
+	public void etag() {
 		String body = "foo";
 		Mono<EntityResponse<String>> result = EntityResponse.fromObject(body).eTag("foo").build();
 		StepVerifier.create(result)
@@ -135,9 +128,8 @@ public class DefaultEntityResponseBuilderTests {
 				.verify();
 	}
 
-
 	@Test
-	public void lastModified() throws Exception {
+	public void lastModified() {
 		ZonedDateTime now = ZonedDateTime.now();
 		String body = "foo";
 		Mono<EntityResponse<String>> result = EntityResponse.fromObject(body).lastModified(now).build();
@@ -149,7 +141,7 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void cacheControlTag() throws Exception {
+	public void cacheControlTag() {
 		String body = "foo";
 		Mono<EntityResponse<String>>
 				result = EntityResponse.fromObject(body).cacheControl(CacheControl.noCache()).build();
@@ -160,7 +152,7 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void varyBy() throws Exception {
+	public void varyBy() {
 		String body = "foo";
 		Mono<EntityResponse<String>> result = EntityResponse.fromObject(body).varyBy("foo").build();
 		List<String> expected = Collections.singletonList("foo");
@@ -171,7 +163,7 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void headers() throws Exception {
+	public void headers() {
 		String body = "foo";
 		HttpHeaders headers = new HttpHeaders();
 		Mono<EntityResponse<String>> result = EntityResponse.fromObject(body).headers(headers).build();
@@ -182,7 +174,7 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void cookies() throws Exception {
+	public void cookies() {
 		MultiValueMap<String, ResponseCookie> newCookies = new LinkedMultiValueMap<>();
 		newCookies.add("name", ResponseCookie.from("name", "value").build());
 		Mono<EntityResponse<String>> result =
@@ -194,17 +186,9 @@ public class DefaultEntityResponseBuilderTests {
 	}
 
 	@Test
-	public void bodyInserter() throws Exception {
+	public void bodyInserter() {
 		String body = "foo";
 		Publisher<String> publisher = Mono.just(body);
-		BiFunction<ServerHttpResponse, BodyInserter.Context, Mono<Void>> writer =
-				(response, strategies) -> {
-					byte[] bodyBytes = body.getBytes(UTF_8);
-					ByteBuffer byteBuffer = ByteBuffer.wrap(bodyBytes);
-					DataBuffer buffer = new DefaultDataBufferFactory().wrap(byteBuffer);
-
-					return response.writeWith(Mono.just(buffer));
-				};
 
 		Mono<EntityResponse<Publisher<String>>> result = EntityResponse.fromPublisher(publisher, String.class).build();
 
@@ -256,7 +240,6 @@ public class DefaultEntityResponseBuilderTests {
 				.expectError(IllegalStateException.class)
 				.verify();
 	}
-
 
 	@Test
 	public void notModifiedLastModified() {

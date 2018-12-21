@@ -17,12 +17,15 @@
 package org.springframework.web.servlet.resource;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -66,24 +69,23 @@ import org.springframework.web.util.UrlPathHelper;
  * according to the guidelines of Page Speed, YSlow, etc.
  *
  * <p>The {@linkplain #setLocations "locations"} property takes a list of Spring
- * {@link Resource} locations from which static resources are allowed to
- * be served by this handler. Resources could be served from a classpath location,
- * e.g. "classpath:/META-INF/public-web-resources/", allowing convenient packaging
+ * {@link Resource} locations from which static resources are allowed to be served
+ * by this handler. Resources could be served from a classpath location, e.g.
+ * "classpath:/META-INF/public-web-resources/", allowing convenient packaging
  * and serving of resources such as .js, .css, and others in jar files.
  *
  * <p>This request handler may also be configured with a
  * {@link #setResourceResolvers(List) resourcesResolver} and
  * {@link #setResourceTransformers(List) resourceTransformer} chains to support
- * arbitrary resolution and transformation of resources being served. By default a
- * {@link PathResourceResolver} simply finds resources based on the configured
- * "locations". An application can configure additional resolvers and
- * transformers such as the {@link VersionResourceResolver} which can resolve
- * and prepare URLs for resources with a version in the URL.
+ * arbitrary resolution and transformation of resources being served. By default
+ * a {@link PathResourceResolver} simply finds resources based on the configured
+ * "locations". An application can configure additional resolvers and transformers
+ * such as the {@link VersionResourceResolver} which can resolve and prepare URLs
+ * for resources with a version in the URL.
  *
- * <p>This handler also properly evaluates the {@code Last-Modified} header (if
- * present) so that a {@code 304} status code will be returned as appropriate,
- * avoiding unnecessary overhead for resources that are already cached by the
- * client.
+ * <p>This handler also properly evaluates the {@code Last-Modified} header
+ * (if present) so that a {@code 304} status code will be returned as appropriate,
+ * avoiding unnecessary overhead for resources that are already cached by the client.
  *
  * @author Keith Donald
  * @author Jeremy Grelle
@@ -110,6 +112,12 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	private final List<ResourceResolver> resourceResolvers = new ArrayList<>(4);
 
 	private final List<ResourceTransformer> resourceTransformers = new ArrayList<>(4);
+
+	@Nullable
+	private ResourceResolverChain resolverChain;
+
+	@Nullable
+	private ResourceTransformerChain transformerChain;
 
 	@Nullable
 	private ResourceHttpMessageConverter resourceHttpMessageConverter;
@@ -176,7 +184,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	}
 
 	/**
-	 * Configure the list of {@link ResourceResolver}s to use.
+	 * Configure the list of {@link ResourceResolver ResourceResolvers} to use.
 	 * <p>By default {@link PathResourceResolver} is configured. If using this property,
 	 * it is recommended to add {@link PathResourceResolver} as the last resolver.
 	 */
@@ -195,7 +203,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	}
 
 	/**
-	 * Configure the list of {@link ResourceTransformer}s to use.
+	 * Configure the list of {@link ResourceTransformer ResourceTransformers} to use.
 	 * <p>By default no transformers are configured for use.
 	 */
 	public void setResourceTransformers(@Nullable List<ResourceTransformer> resourceTransformers) {
@@ -324,6 +332,10 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 		initAllowedLocations();
 
+		// Initialize immutable resolver and transformer chains
+		this.resolverChain = new DefaultResourceResolverChain(this.resourceResolvers);
+		this.transformerChain = new DefaultResourceTransformerChain(this.resolverChain, this.resourceTransformers);
+
 		if (this.resourceHttpMessageConverter == null) {
 			this.resourceHttpMessageConverter = new ResourceHttpMessageConverter();
 		}
@@ -355,7 +367,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 			Charset charset = null;
 			location = location.trim();
 			if (location.startsWith(URL_RESOURCE_CHARSET_PREFIX)) {
-				int endIndex = location.indexOf("]", URL_RESOURCE_CHARSET_PREFIX.length());
+				int endIndex = location.indexOf(']', URL_RESOURCE_CHARSET_PREFIX.length());
 				if (endIndex == -1) {
 					throw new IllegalArgumentException("Invalid charset syntax in location: " + location);
 				}
@@ -438,7 +450,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 		// For very general mappings (e.g. "/") we need to check 404 first
 		Resource resource = getResource(request);
 		if (resource == null) {
-			logger.trace("No matching resource found - returning 404");
+			logger.debug("Resource not found");
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
@@ -453,7 +465,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 		// Header phase
 		if (new ServletWebRequest(request, response).checkNotModified(resource.lastModified())) {
-			logger.trace("Resource not modified - returning 304");
+			logger.trace("Resource not modified");
 			return;
 		}
 
@@ -462,21 +474,10 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 		// Check the media type for the resource
 		MediaType mediaType = getMediaType(request, resource);
-		if (mediaType != null) {
-			if (logger.isTraceEnabled()) {
-				logger.trace("Determined media type '" + mediaType + "' for " + resource);
-			}
-		}
-		else {
-			if (logger.isTraceEnabled()) {
-				logger.trace("No media type found for " + resource + " - not sending a content-type header");
-			}
-		}
 
 		// Content phase
 		if (METHOD_HEAD.equals(request.getMethod())) {
 			setHeaders(response, resource, mediaType);
-			logger.trace("HEAD request - skipping content");
 			return;
 		}
 
@@ -510,46 +511,67 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 			throw new IllegalStateException("Required request attribute '" +
 					HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE + "' is not set");
 		}
+
 		path = processPath(path);
 		if (!StringUtils.hasText(path) || isInvalidPath(path)) {
-			if (logger.isTraceEnabled()) {
-				logger.trace("Ignoring invalid resource path [" + path + "]");
-			}
 			return null;
 		}
-		if (path.contains("%")) {
-			try {
-				// Use URLDecoder (vs UriUtils) to preserve potentially decoded UTF-8 chars
-				if (isInvalidPath(URLDecoder.decode(path, "UTF-8"))) {
-					if (logger.isTraceEnabled()) {
-						logger.trace("Ignoring invalid resource path with escape sequences [" + path + "].");
-					}
-					return null;
-				}
-			}
-			catch (IllegalArgumentException ex) {
-				// ignore
-			}
+		if (isInvalidEncodedPath(path)) {
+			return null;
 		}
-		ResourceResolverChain resolveChain = new DefaultResourceResolverChain(getResourceResolvers());
-		Resource resource = resolveChain.resolveResource(request, path, getLocations());
-		if (resource == null || getResourceTransformers().isEmpty()) {
-			return resource;
+
+		Assert.notNull(this.resolverChain, "ResourceResolverChain not initialized.");
+		Assert.notNull(this.transformerChain, "ResourceTransformerChain not initialized.");
+
+		Resource resource = this.resolverChain.resolveResource(request, path, getLocations());
+		if (resource != null) {
+			resource = this.transformerChain.transform(request, resource);
 		}
-		ResourceTransformerChain transformChain =
-				new DefaultResourceTransformerChain(resolveChain, getResourceTransformers());
-		resource = transformChain.transform(request, resource);
 		return resource;
 	}
 
 	/**
-	 * Process the given resource path to be used.
-	 * <p>The default implementation replaces any combination of leading '/' and
-	 * control characters (00-1F and 7F) with a single "/" or "". For example
-	 * {@code "  // /// ////  foo/bar"} becomes {@code "/foo/bar"}.
+	 * Process the given resource path.
+	 * <p>The default implementation replaces:
+	 * <ul>
+	 * <li>Backslash with forward slash.
+	 * <li>Duplicate occurrences of slash with a single slash.
+	 * <li>Any combination of leading slash and control characters (00-1F and 7F)
+	 * with a single "/" or "". For example {@code "  / // foo/bar"}
+	 * becomes {@code "/foo/bar"}.
+	 * </ul>
 	 * @since 3.2.12
 	 */
 	protected String processPath(String path) {
+		path = StringUtils.replace(path, "\\", "/");
+		path = cleanDuplicateSlashes(path);
+		return cleanLeadingSlash(path);
+	}
+
+	private String cleanDuplicateSlashes(String path) {
+		StringBuilder sb = null;
+		char prev = 0;
+		for (int i = 0; i < path.length(); i++) {
+			char curr = path.charAt(i);
+			try {
+				if ((curr == '/') && (prev == '/')) {
+					if (sb == null) {
+						sb = new StringBuilder(path.substring(0, i));
+					}
+					continue;
+				}
+				if (sb != null) {
+					sb.append(path.charAt(i));
+				}
+			}
+			finally {
+				prev = curr;
+			}
+		}
+		return sb != null ? sb.toString() : path;
+	}
+
+	private String cleanLeadingSlash(String path) {
 		boolean slash = false;
 		for (int i = 0; i < path.length(); i++) {
 			if (path.charAt(i) == '/') {
@@ -559,14 +581,35 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 				if (i == 0 || (i == 1 && slash)) {
 					return path;
 				}
-				path = slash ? "/" + path.substring(i) : path.substring(i);
-				if (logger.isTraceEnabled()) {
-					logger.trace("Path after trimming leading '/' and control characters: " + path);
-				}
-				return path;
+				return (slash ? "/" + path.substring(i) : path.substring(i));
 			}
 		}
 		return (slash ? "/" : "");
+	}
+
+	/**
+	 * Check whether the given path contains invalid escape sequences.
+	 * @param path the path to validate
+	 * @return {@code true} if the path is invalid, {@code false} otherwise
+	 */
+	private boolean isInvalidEncodedPath(String path) {
+		if (path.contains("%")) {
+			try {
+				// Use URLDecoder (vs UriUtils) to preserve potentially decoded UTF-8 chars
+				String decodedPath = URLDecoder.decode(path, "UTF-8");
+				if (isInvalidPath(decodedPath)) {
+					return true;
+				}
+				decodedPath = processPath(decodedPath);
+				if (isInvalidPath(decodedPath)) {
+					return true;
+				}
+			}
+			catch (IllegalArgumentException | UnsupportedEncodingException ex) {
+				// Should never happen...
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -583,34 +626,29 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	 * path starts predictably with a single '/' or does not have one.
 	 * @param path the path to validate
 	 * @return {@code true} if the path is invalid, {@code false} otherwise
+	 * @since 3.0.6
 	 */
 	protected boolean isInvalidPath(String path) {
-		if (logger.isTraceEnabled()) {
-			logger.trace("Applying \"invalid path\" checks to path: " + path);
-		}
 		if (path.contains("WEB-INF") || path.contains("META-INF")) {
-			if (logger.isTraceEnabled()) {
-				logger.trace("Path contains \"WEB-INF\" or \"META-INF\".");
+			if (logger.isWarnEnabled()) {
+				logger.warn("Path with \"WEB-INF\" or \"META-INF\": [" + path + "]");
 			}
 			return true;
 		}
 		if (path.contains(":/")) {
 			String relativePath = (path.charAt(0) == '/' ? path.substring(1) : path);
 			if (ResourceUtils.isUrl(relativePath) || relativePath.startsWith("url:")) {
-				if (logger.isTraceEnabled()) {
-					logger.trace("Path represents URL or has \"url:\" prefix.");
+				if (logger.isWarnEnabled()) {
+					logger.warn("Path represents URL or has \"url:\" prefix: [" + path + "]");
 				}
 				return true;
 			}
 		}
-		if (path.contains("..")) {
-			path = StringUtils.cleanPath(path);
-			if (path.contains("../")) {
-				if (logger.isTraceEnabled()) {
-					logger.trace("Path contains \"../\" after call to StringUtils#cleanPath.");
-				}
-				return true;
+		if (path.contains("..") && StringUtils.cleanPath(path).contains("../")) {
+			if (logger.isWarnEnabled()) {
+				logger.warn("Path contains \"../\" after call to StringUtils#cleanPath: [" + path + "]");
 			}
+			return true;
 		}
 		return false;
 	}
@@ -654,10 +692,9 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 		}
 		if (resource instanceof HttpResource) {
 			HttpHeaders resourceHeaders = ((HttpResource) resource).getResponseHeaders();
-			for (Map.Entry<String, List<String>> entry : resourceHeaders.entrySet()) {
-				String headerName = entry.getKey();
+			resourceHeaders.forEach((headerName, headerValues) -> {
 				boolean first = true;
-				for (String headerValue : entry.getValue()) {
+				for (String headerValue : headerValues) {
 					if (first) {
 						response.setHeader(headerName, headerValue);
 					}
@@ -666,7 +703,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 					}
 					first = false;
 				}
-			}
+			});
 		}
 		response.setHeader(HttpHeaders.ACCEPT_RANGES, "bytes");
 	}
@@ -674,7 +711,17 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 	@Override
 	public String toString() {
-		return "ResourceHttpRequestHandler [locations=" + getLocations() + ", resolvers=" + getResourceResolvers() + "]";
+		return "ResourceHttpRequestHandler " + formatLocations();
+	}
+
+	private Object formatLocations() {
+		if (!this.locationValues.isEmpty()) {
+			return this.locationValues.stream().collect(Collectors.joining("\", \"", "[\"", "\"]"));
+		}
+		else if (!this.locations.isEmpty()) {
+			return this.locations;
+		}
+		return Collections.emptyList();
 	}
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,6 +25,7 @@ import javax.servlet.ServletContext;
 
 import org.springframework.beans.factory.BeanInitializationException;
 import org.springframework.context.ApplicationContext;
+import org.springframework.core.Ordered;
 import org.springframework.lang.Nullable;
 import org.springframework.util.Assert;
 import org.springframework.web.HttpRequestHandler;
@@ -65,7 +66,7 @@ public class ResourceHandlerRegistry {
 
 	private final List<ResourceHandlerRegistration> registrations = new ArrayList<>();
 
-	private int order = Integer.MAX_VALUE -1;
+	private int order = Ordered.LOWEST_PRECEDENCE - 1;
 
 
 	/**
@@ -135,7 +136,7 @@ public class ResourceHandlerRegistry {
 	}
 
 	/**
-	 * Specify the order to use for resource handling relative to other {@link HandlerMapping}s
+	 * Specify the order to use for resource handling relative to other {@link HandlerMapping HandlerMappings}
 	 * configured in the Spring MVC application context.
 	 * <p>The default value used is {@code Integer.MAX_VALUE-1}.
 	 */
@@ -177,7 +178,7 @@ public class ResourceHandlerRegistry {
 		}
 
 		SimpleUrlHandlerMapping handlerMapping = new SimpleUrlHandlerMapping();
-		handlerMapping.setOrder(order);
+		handlerMapping.setOrder(this.order);
 		handlerMapping.setUrlMap(urlMap);
 		return handlerMapping;
 	}

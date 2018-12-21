@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,16 +33,16 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.core.codec.Hints;
 import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpRange;
-import org.springframework.http.HttpRequest;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.HttpMessageReader;
+import org.springframework.http.codec.multipart.Part;
 import org.springframework.http.server.PathContainer;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
-import org.springframework.util.Assert;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyExtractor;
 import org.springframework.web.reactive.function.BodyExtractors;
@@ -63,7 +63,8 @@ class DefaultServerRequest implements ServerRequest {
 
 	private static final Function<UnsupportedMediaTypeException, UnsupportedMediaTypeStatusException> ERROR_MAPPER =
 			ex -> (ex.getContentType() != null ?
-					new UnsupportedMediaTypeStatusException(ex.getContentType(), ex.getSupportedMediaTypes()) :
+					new UnsupportedMediaTypeStatusException(
+							ex.getContentType(), ex.getSupportedMediaTypes(), ex.getBodyType()) :
 					new UnsupportedMediaTypeStatusException(ex.getMessage()));
 
 
@@ -76,12 +77,8 @@ class DefaultServerRequest implements ServerRequest {
 
 	DefaultServerRequest(ServerWebExchange exchange, List<HttpMessageReader<?>> messageReaders) {
 		this.exchange = exchange;
-		this.messageReaders = unmodifiableCopy(messageReaders);
+		this.messageReaders = Collections.unmodifiableList(new ArrayList<>(messageReaders));
 		this.headers = new DefaultHeaders();
-	}
-
-	private static <T> List<T> unmodifiableCopy(List<? extends T> list) {
-		return Collections.unmodifiableList(new ArrayList<>(list));
 	}
 
 
@@ -97,7 +94,7 @@ class DefaultServerRequest implements ServerRequest {
 
 	@Override
 	public UriBuilder uriBuilder() {
-		return UriComponentsBuilder.fromHttpRequest(new ServerRequestAdapter());
+		return UriComponentsBuilder.fromUri(uri());
 	}
 
 	@Override
@@ -116,13 +113,27 @@ class DefaultServerRequest implements ServerRequest {
 	}
 
 	@Override
+	public Optional<InetSocketAddress> remoteAddress() {
+		return Optional.ofNullable(request().getRemoteAddress());
+	}
+
+	@Override
+	public List<HttpMessageReader<?>> messageReaders() {
+		return this.messageReaders;
+	}
+
+	@Override
 	public <T> T body(BodyExtractor<T, ? super ServerHttpRequest> extractor) {
-		return body(extractor, Collections.emptyMap());
+		return bodyInternal(extractor, Hints.from(Hints.LOG_PREFIX_HINT, exchange().getLogPrefix()));
 	}
 
 	@Override
 	public <T> T body(BodyExtractor<T, ? super ServerHttpRequest> extractor, Map<String, Object> hints) {
-		Assert.notNull(extractor, "'extractor' must not be null");
+		hints = Hints.merge(hints, Hints.LOG_PREFIX_HINT, exchange().getLogPrefix());
+		return bodyInternal(extractor, hints);
+	}
+
+	private <T> T bodyInternal(BodyExtractor<T, ? super ServerHttpRequest> extractor, Map<String, Object> hints) {
 		return extractor.extract(request(),
 				new BodyExtractor.Context() {
 					@Override
@@ -190,17 +201,28 @@ class DefaultServerRequest implements ServerRequest {
 		return this.exchange.getPrincipal();
 	}
 
+	@Override
+	public Mono<MultiValueMap<String, String>> formData() {
+		return this.exchange.getFormData();
+	}
+
+	@Override
+	public Mono<MultiValueMap<String, Part>> multipartData() {
+		return this.exchange.getMultipartData();
+	}
+
 	private ServerHttpRequest request() {
 		return this.exchange.getRequest();
 	}
 
-	ServerWebExchange exchange() {
+	@Override
+	public ServerWebExchange exchange() {
 		return this.exchange;
 	}
 
 	@Override
 	public String toString() {
-		return String.format("%s %s", method(), path());
+		return String.format("HTTP %s %s", method(), path());
 	}
 
 
@@ -262,24 +284,5 @@ class DefaultServerRequest implements ServerRequest {
 			return delegate().toString();
 		}
 	}
-
-	private final class ServerRequestAdapter implements HttpRequest {
-
-		@Override
-		public String getMethodValue() {
-			return methodName();
-		}
-
-		@Override
-		public URI getURI() {
-			return uri();
-		}
-
-		@Override
-		public HttpHeaders getHeaders() {
-			return request().getHeaders();
-		}
-	}
-
 
 }

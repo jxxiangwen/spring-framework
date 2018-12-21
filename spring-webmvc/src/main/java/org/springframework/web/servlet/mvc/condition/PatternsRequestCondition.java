@@ -175,8 +175,8 @@ public final class PatternsRequestCondition extends AbstractRequestCondition<Pat
 		else {
 			result.add("");
 		}
-		return new PatternsRequestCondition(result, this.pathHelper, this.pathMatcher, this.useSuffixPatternMatch,
-				this.useTrailingSlashMatch, this.fileExtensions);
+		return new PatternsRequestCondition(result, this.pathHelper, this.pathMatcher,
+				this.useSuffixPatternMatch, this.useTrailingSlashMatch, this.fileExtensions);
 	}
 
 	/**
@@ -198,17 +198,14 @@ public final class PatternsRequestCondition extends AbstractRequestCondition<Pat
 	@Override
 	@Nullable
 	public PatternsRequestCondition getMatchingCondition(HttpServletRequest request) {
-
 		if (this.patterns.isEmpty()) {
 			return this;
 		}
-
 		String lookupPath = this.pathHelper.getLookupPathForRequest(request);
 		List<String> matches = getMatchingPatterns(lookupPath);
-
-		return matches.isEmpty() ? null :
-			new PatternsRequestCondition(matches, this.pathHelper, this.pathMatcher, this.useSuffixPatternMatch,
-					this.useTrailingSlashMatch, this.fileExtensions);
+		return (!matches.isEmpty() ?
+				new PatternsRequestCondition(matches, this.pathHelper, this.pathMatcher,
+						this.useSuffixPatternMatch, this.useTrailingSlashMatch, this.fileExtensions) : null);
 	}
 
 	/**
@@ -228,7 +225,9 @@ public final class PatternsRequestCondition extends AbstractRequestCondition<Pat
 				matches.add(match);
 			}
 		}
-		matches.sort(this.pathMatcher.getPatternComparator(lookupPath));
+		if (matches.size() > 1) {
+			matches.sort(this.pathMatcher.getPatternComparator(lookupPath));
+		}
 		return matches;
 	}
 

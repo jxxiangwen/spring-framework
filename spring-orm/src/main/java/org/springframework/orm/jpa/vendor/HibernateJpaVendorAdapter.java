@@ -28,6 +28,7 @@ import org.hibernate.cfg.AvailableSettings;
 import org.hibernate.dialect.DB2Dialect;
 import org.hibernate.dialect.DerbyTenSevenDialect;
 import org.hibernate.dialect.H2Dialect;
+import org.hibernate.dialect.HANAColumnStoreDialect;
 import org.hibernate.dialect.HSQLDialect;
 import org.hibernate.dialect.InformixDialect;
 import org.hibernate.dialect.MySQL5Dialect;
@@ -40,7 +41,7 @@ import org.springframework.lang.Nullable;
 
 /**
  * {@link org.springframework.orm.jpa.JpaVendorAdapter} implementation for Hibernate
- * EntityManager. Developed and tested against Hibernate 5.0, 5.1 and 5.2;
+ * EntityManager. Developed and tested against Hibernate 5.0, 5.1, 5.2 and 5.3;
  * backwards-compatible with Hibernate 4.3 at runtime on a best-effort basis.
  *
  * <p>Exposes Hibernate's persistence provider and EntityManager extension interface,
@@ -185,6 +186,7 @@ public class HibernateJpaVendorAdapter extends AbstractJpaVendorAdapter {
 			case DB2: return DB2Dialect.class;
 			case DERBY: return DerbyTenSevenDialect.class;
 			case H2: return H2Dialect.class;
+			case HANA: return HANAColumnStoreDialect.class;
 			case HSQL: return HSQLDialect.class;
 			case INFORMIX: return InformixDialect.class;
 			case MYSQL: return MySQL5Dialect.class;

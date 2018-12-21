@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -38,7 +38,6 @@ import static org.junit.Assert.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-
 
 /**
  * Unit tests for {@link ResourceUrlProvider}.
@@ -90,6 +89,16 @@ public class ResourceUrlProviderTests {
 		assertEquals("/resources/foo.css#hash", resolvedUrl);
 	}
 
+	@Test // SPR-16526
+	public void getStaticResourceWithMissingContextPath() {
+		MockHttpServletRequest request = new MockHttpServletRequest();
+		request.setContextPath("/contextpath-longer-than-request-path");
+		request.setRequestURI("/contextpath-longer-than-request-path/style.css");
+		String url = "/resources/foo.css";
+		String resolvedUrl = this.urlProvider.getForRequestUrl(request, url);
+		assertNull(resolvedUrl);
+	}
+
 	@Test
 	public void getFingerprintedResourceUrl() {
 		Map<String, VersionStrategy> versionStrategyMap = new HashMap<>();
@@ -128,6 +137,7 @@ public class ResourceUrlProviderTests {
 	}
 
 	@Test // SPR-12592
+	@SuppressWarnings("resource")
 	public void initializeOnce() throws Exception {
 		AnnotationConfigWebApplicationContext context = new AnnotationConfigWebApplicationContext();
 		context.setServletContext(new MockServletContext());

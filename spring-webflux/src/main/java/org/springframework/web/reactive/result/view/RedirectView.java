@@ -244,7 +244,7 @@ public class RedirectView extends AbstractUrlBasedView {
 		while (found) {
 			String name = matcher.group(1);
 			Object value = (model.containsKey(name) ? model.get(name) : uriVariables.get(name));
-			Assert.notNull(value, "No value for URI variable '" + name + "'");
+			Assert.notNull(value, () -> "No value for URI variable '" + name + "'");
 			result.append(targetUrl.substring(endLastMatch, matcher.start()));
 			result.append(encodeUriVariable(value.toString()));
 			endLastMatch = matcher.end();
@@ -268,7 +268,7 @@ public class RedirectView extends AbstractUrlBasedView {
 			return new StringBuilder(targetUrl);
 		}
 
-		int index = targetUrl.indexOf("#");
+		int index = targetUrl.indexOf('#');
 		String fragment = (index > -1 ? targetUrl.substring(index) : null);
 
 		StringBuilder result = new StringBuilder();
@@ -283,7 +283,7 @@ public class RedirectView extends AbstractUrlBasedView {
 	}
 
 	/**
-	 * Send a redirect back to the HTTP client
+	 * Send a redirect back to the HTTP client.
 	 * @param targetUrl the target URL to redirect to
 	 * @param exchange current exchange
 	 */

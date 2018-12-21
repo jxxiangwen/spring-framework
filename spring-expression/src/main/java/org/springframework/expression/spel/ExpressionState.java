@@ -20,7 +20,6 @@ import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -65,7 +64,7 @@ public class ExpressionState {
 	private Deque<TypedValue> contextObjects;
 
 	@Nullable
-	private LinkedList<VariableScope> variableScopes;
+	private Deque<VariableScope> variableScopes;
 
 	// When entering a new scope there is a new base object which should be used
 	// for '#this' references (or to act as a target for unqualified references).
@@ -106,7 +105,7 @@ public class ExpressionState {
 		if (CollectionUtils.isEmpty(this.contextObjects)) {
 			return this.rootObject;
 		}
-		return this.contextObjects.peek();
+		return this.contextObjects.element();
 	}
 
 	public void pushActiveContextObject(TypedValue obj) {
@@ -136,7 +135,7 @@ public class ExpressionState {
 		if (CollectionUtils.isEmpty(this.scopeRootObjects)) {
 			return this.rootObject;
 		}
-		return this.scopeRootObjects.peek();
+		return this.scopeRootObjects.element();
 	}
 
 	public void setVariable(String name, @Nullable Object value) {
@@ -157,8 +156,8 @@ public class ExpressionState {
 	}
 
 	public Object convertValue(Object value, TypeDescriptor targetTypeDescriptor) throws EvaluationException {
-		Object result = this.relatedContext.getTypeConverter().convertValue(value,
-				TypeDescriptor.forObject(value), targetTypeDescriptor);
+		Object result = this.relatedContext.getTypeConverter().convertValue(
+				value, TypeDescriptor.forObject(value), targetTypeDescriptor);
 		if (result == null) {
 			throw new IllegalStateException("Null conversion result for value [" + value + "]");
 		}
@@ -172,7 +171,8 @@ public class ExpressionState {
 	@Nullable
 	public Object convertValue(TypedValue value, TypeDescriptor targetTypeDescriptor) throws EvaluationException {
 		Object val = value.getValue();
-		return this.relatedContext.getTypeConverter().convertValue(val, TypeDescriptor.forObject(val), targetTypeDescriptor);
+		return this.relatedContext.getTypeConverter().convertValue(
+				val, TypeDescriptor.forObject(val), targetTypeDescriptor);
 	}
 
 	/*
@@ -199,7 +199,7 @@ public class ExpressionState {
 	}
 
 	public void setLocalVariable(String name, Object value) {
-		initVariableScopes().peek().setVariable(name, value);
+		initVariableScopes().element().setVariable(name, value);
 	}
 
 	@Nullable
@@ -212,16 +212,16 @@ public class ExpressionState {
 		return null;
 	}
 
-	private LinkedList<VariableScope> initVariableScopes() {
+	private Deque<VariableScope> initVariableScopes() {
 		if (this.variableScopes == null) {
-			this.variableScopes = new LinkedList<>();
-			// top level empty variable scope
+			this.variableScopes = new ArrayDeque<>();
+			// top-level empty variable scope
 			this.variableScopes.add(new VariableScope());
 		}
 		return this.variableScopes;
 	}
 
-	private ArrayDeque<TypedValue> initScopeRootObjects() {
+	private Deque<TypedValue> initScopeRootObjects() {
 		if (this.scopeRootObjects == null) {
 			this.scopeRootObjects = new ArrayDeque<>();
 		}

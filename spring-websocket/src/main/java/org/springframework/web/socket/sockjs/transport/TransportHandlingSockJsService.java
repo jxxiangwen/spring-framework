@@ -17,6 +17,7 @@
 package org.springframework.web.socket.sockjs.transport;
 
 import java.io.IOException;
+import java.security.Principal;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -52,8 +53,8 @@ import org.springframework.web.socket.sockjs.support.AbstractSockJsService;
  * A basic implementation of {@link org.springframework.web.socket.sockjs.SockJsService}
  * with support for SPI-based transport handling and session management.
  *
- * <p>Based on the {@link TransportHandler} SPI. {@link TransportHandler}s may additionally
- * implement the {@link SockJsSessionFactory} and {@link HandshakeHandler} interfaces.
+ * <p>Based on the {@link TransportHandler} SPI. {@code TransportHandlers} may
+ * additionally implement the {@link SockJsSessionFactory} and {@link HandshakeHandler} interfaces.
  *
  * <p>See the {@link AbstractSockJsService} base class for important details on request mapping.
  *
@@ -80,7 +81,7 @@ public class TransportHandlingSockJsService extends AbstractSockJsService implem
 	@Nullable
 	private ScheduledFuture<?> sessionCleanupTask;
 
-	private boolean running;
+	private volatile boolean running;
 
 
 	/**
@@ -288,12 +289,11 @@ public class TransportHandlingSockJsService extends AbstractSockJsService implem
 				}
 			}
 			else {
-				if (session.getPrincipal() != null) {
-					if (!session.getPrincipal().equals(request.getPrincipal())) {
-						logger.debug("The user for the session does not match the user for the request.");
-						response.setStatusCode(HttpStatus.NOT_FOUND);
-						return;
-					}
+				Principal principal = session.getPrincipal();
+				if (principal != null && !principal.equals(request.getPrincipal())) {
+					logger.debug("The user for the session does not match the user for the request.");
+					response.setStatusCode(HttpStatus.NOT_FOUND);
+					return;
 				}
 				if (!transportHandler.checkSessionType(session)) {
 					logger.debug("Session type does not match the transport type for the request.");
@@ -305,17 +305,11 @@ public class TransportHandlingSockJsService extends AbstractSockJsService implem
 			if (transportType.sendsNoCacheInstruction()) {
 				addNoCacheHeaders(response);
 			}
-
-			if (transportType.supportsCors()) {
-				if (!checkOrigin(request, response)) {
-					return;
-				}
+			if (transportType.supportsCors() && !checkOrigin(request, response)) {
+				return;
 			}
 
-
 			transportHandler.handleRequest(request, response, handler, session);
-
-
 			chain.applyAfterHandshake(request, response, null);
 		}
 		catch (SockJsException ex) {
@@ -373,10 +367,10 @@ public class TransportHandlingSockJsService extends AbstractSockJsService implem
 			}
 			this.sessionCleanupTask = getTaskScheduler().scheduleAtFixedRate(() -> {
 				List<String> removedIds = new ArrayList<>();
-				for (SockJsSession session : sessions.values()) {
+				for (SockJsSession session : this.sessions.values()) {
 					try {
 						if (session.getTimeSinceLastActive() > getDisconnectDelay()) {
-							sessions.remove(session.getId());
+							this.sessions.remove(session.getId());
 							removedIds.add(session.getId());
 							session.close();
 						}

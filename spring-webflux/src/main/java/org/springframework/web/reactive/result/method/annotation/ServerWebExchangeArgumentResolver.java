@@ -16,6 +16,7 @@
 
 package org.springframework.web.reactive.result.method.annotation;
 
+import java.net.URI;
 import java.time.ZoneId;
 import java.util.Locale;
 import java.util.TimeZone;
@@ -101,15 +102,16 @@ public class ServerWebExchangeArgumentResolver extends HandlerMethodArgumentReso
 		else if (TimeZone.class == paramType) {
 			LocaleContext localeContext = exchange.getLocaleContext();
 			TimeZone timeZone = getTimeZone(localeContext);
-			return timeZone != null ? timeZone : TimeZone.getDefault();
+			return (timeZone != null ? timeZone : TimeZone.getDefault());
 		}
 		else if (ZoneId.class == paramType) {
 			LocaleContext localeContext = exchange.getLocaleContext();
 			TimeZone timeZone = getTimeZone(localeContext);
-			return timeZone != null ? timeZone.toZoneId() : ZoneId.systemDefault();
+			return (timeZone != null ? timeZone.toZoneId() : ZoneId.systemDefault());
 		}
 		else if (UriBuilder.class == paramType || UriComponentsBuilder.class == paramType) {
-			return UriComponentsBuilder.fromHttpRequest(exchange.getRequest());
+			URI uri = exchange.getRequest().getURI();
+			return UriComponentsBuilder.fromUri(uri).replacePath(null).replaceQuery(null);
 		}
 		else {
 			// should never happen...

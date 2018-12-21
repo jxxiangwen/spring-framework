@@ -26,6 +26,8 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import javax.jms.Connection;
 import javax.jms.ConnectionFactory;
 import javax.jms.Destination;
@@ -61,6 +63,11 @@ import org.springframework.util.ObjectUtils;
  * lead to queue/topic mode, respectively; generic {@code createConnection}
  * calls will lead to a JMS 1.1 connection which is able to serve both modes.
  *
+ * <p>As of Spring Framework 5, this class supports JMS 2.0 {@code JMSContext}
+ * calls and therefore requires the JMS 2.0 API to be present at runtime.
+ * It may nevertheless run against a JMS 1.1 driver (bound to the JMS 2.0 API)
+ * as long as no actual JMS 2.0 calls are triggered by the application's setup.
+ *
  * <p><b>NOTE: This ConnectionFactory requires explicit closing of all Sessions
  * obtained from its shared Connection.</b> This is the usual recommendation for
  * native JMS access code anyway. However, with this ConnectionFactory, its use
@@ -86,7 +93,7 @@ public class CachingConnectionFactory extends SingleConnectionFactory {
 
 	private volatile boolean active = true;
 
-	private final Map<Integer, LinkedList<Session>> cachedSessions = new HashMap<>();
+	private final ConcurrentMap<Integer, LinkedList<Session>> cachedSessions = new ConcurrentHashMap<>();
 
 
 	/**
@@ -208,14 +215,7 @@ public class CachingConnectionFactory extends SingleConnectionFactory {
 			return null;
 		}
 
-		LinkedList<Session> sessionList;
-		synchronized (this.cachedSessions) {
-			sessionList = this.cachedSessions.get(mode);
-			if (sessionList == null) {
-				sessionList = new LinkedList<>();
-				this.cachedSessions.put(mode, sessionList);
-			}
-		}
+		LinkedList<Session> sessionList = this.cachedSessions.computeIfAbsent(mode, k -> new LinkedList<>());
 		Session session = null;
 		synchronized (sessionList) {
 			if (!sessionList.isEmpty()) {
@@ -583,6 +583,11 @@ public class CachingConnectionFactory extends SingleConnectionFactory {
 					ObjectUtils.nullSafeEquals(this.noLocal, otherKey.noLocal) &&
 					ObjectUtils.nullSafeEquals(this.subscription, otherKey.subscription) &&
 					this.durable == otherKey.durable);
+		}
+
+		@Override
+		public int hashCode() {
+			return 31 * super.hashCode() + ObjectUtils.nullSafeHashCode(this.selector);
 		}
 
 		@Override

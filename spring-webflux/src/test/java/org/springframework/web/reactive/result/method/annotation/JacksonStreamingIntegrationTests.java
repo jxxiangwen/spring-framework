@@ -70,8 +70,8 @@ public class JacksonStreamingIntegrationTests extends AbstractHttpHandlerIntegra
 		Flux<Person> result = this.webClient.get()
 				.uri("/stream")
 				.accept(APPLICATION_STREAM_JSON)
-				.exchange()
-				.flatMapMany(response -> response.bodyToFlux(Person.class));
+				.retrieve()
+				.bodyToFlux(Person.class);
 
 		StepVerifier.create(result)
 				.expectNext(new Person("foo 0"))
@@ -85,8 +85,8 @@ public class JacksonStreamingIntegrationTests extends AbstractHttpHandlerIntegra
 		Flux<Person> result = this.webClient.get()
 				.uri("/stream")
 				.accept(new MediaType("application", "stream+x-jackson-smile"))
-				.exchange()
-				.flatMapMany(response -> response.bodyToFlux(Person.class));
+				.retrieve()
+				.bodyToFlux(Person.class);
 
 		StepVerifier.create(result)
 				.expectNext(new Person("foo 0"))
@@ -102,7 +102,7 @@ public class JacksonStreamingIntegrationTests extends AbstractHttpHandlerIntegra
 		@GetMapping(value = "/stream",
 				produces = { APPLICATION_STREAM_JSON_VALUE, "application/stream+x-jackson-smile" })
 		Flux<Person> person() {
-			return interval(Duration.ofMillis(100), 50).map(l -> new Person("foo " + l));
+			return testInterval(Duration.ofMillis(100), 50).map(l -> new Person("foo " + l));
 		}
 
 	}

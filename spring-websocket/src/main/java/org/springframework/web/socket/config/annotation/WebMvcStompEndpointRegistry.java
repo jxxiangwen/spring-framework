@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -77,6 +77,9 @@ public class WebMvcStompEndpointRegistry implements StompEndpointRegistry {
 		if (transportRegistration.getSendBufferSizeLimit() != null) {
 			this.subProtocolWebSocketHandler.setSendBufferSizeLimit(transportRegistration.getSendBufferSizeLimit());
 		}
+		if (transportRegistration.getTimeToFirstMessage() != null) {
+			this.subProtocolWebSocketHandler.setTimeToFirstMessage(transportRegistration.getTimeToFirstMessage());
+		}
 
 		this.stompHandler = new StompSubProtocolHandler();
 		if (transportRegistration.getMessageSizeLimit() != null) {
@@ -150,11 +153,11 @@ public class WebMvcStompEndpointRegistry implements StompEndpointRegistry {
 		Map<String, Object> urlMap = new LinkedHashMap<>();
 		for (WebMvcStompWebSocketEndpointRegistration registration : this.registrations) {
 			MultiValueMap<HttpRequestHandler, String> mappings = registration.getMappings();
-			for (HttpRequestHandler httpHandler : mappings.keySet()) {
-				for (String pattern : mappings.get(httpHandler)) {
+			mappings.forEach((httpHandler, patterns) -> {
+				for (String pattern : patterns) {
 					urlMap.put(pattern, httpHandler);
 				}
-			}
+			});
 		}
 		WebSocketHandlerMapping hm = new WebSocketHandlerMapping();
 		hm.setUrlMap(urlMap);

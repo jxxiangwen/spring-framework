@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2017 the original author or authors.
+ * Copyright 2002-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ import org.springframework.lang.Nullable;
  */
 public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanRegistry {
 
-	/** Cache of singleton objects created by FactoryBeans: FactoryBean name --> object */
+	/** Cache of singleton objects created by FactoryBeans: FactoryBean name to object. */
 	private final Map<String, Object> factoryBeanObjectCache = new ConcurrentHashMap<>(16);
 
 
@@ -66,7 +66,7 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 		}
 		catch (Throwable ex) {
 			// Thrown from the FactoryBean's getObjectType implementation.
-			logger.warn("FactoryBean threw exception from getObjectType, despite the contract saying " +
+			logger.info("FactoryBean threw exception from getObjectType, despite the contract saying " +
 					"that it should return null if the type of its object cannot be determined yet", ex);
 			return null;
 		}
@@ -107,6 +107,11 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 					}
 					else {
 						if (shouldPostProcess) {
+							if (isSingletonCurrentlyInCreation(beanName)) {
+								// Temporarily return non-post-processed object, not storing it yet..
+								return object;
+							}
+							beforeSingletonCreation(beanName);
 							try {
 								object = postProcessObjectFromFactoryBean(object, beanName);
 							}
@@ -114,8 +119,13 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 								throw new BeanCreationException(beanName,
 										"Post-processing of FactoryBean's singleton object failed", ex);
 							}
+							finally {
+								afterSingletonCreation(beanName);
+							}
 						}
-						this.factoryBeanObjectCache.put(beanName, object);
+						if (containsSingleton(beanName)) {
+							this.factoryBeanObjectCache.put(beanName, object);
+						}
 					}
 				}
 				return object;
@@ -214,17 +224,21 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 	 */
 	@Override
 	protected void removeSingleton(String beanName) {
-		super.removeSingleton(beanName);
-		this.factoryBeanObjectCache.remove(beanName);
+		synchronized (getSingletonMutex()) {
+			super.removeSingleton(beanName);
+			this.factoryBeanObjectCache.remove(beanName);
+		}
 	}
 
 	/**
 	 * Overridden to clear the FactoryBean object cache as well.
 	 */
 	@Override
-	public void destroySingletons() {
-		super.destroySingletons();
-		this.factoryBeanObjectCache.clear();
+	protected void clearSingletonCache() {
+		synchronized (getSingletonMutex()) {
+			super.clearSingletonCache();
+			this.factoryBeanObjectCache.clear();
+		}
 	}
 
 	/**
