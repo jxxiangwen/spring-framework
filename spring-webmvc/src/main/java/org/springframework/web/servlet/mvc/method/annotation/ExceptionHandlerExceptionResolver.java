@@ -232,7 +232,7 @@ public class ExceptionHandlerExceptionResolver extends AbstractHandlerMethodExce
 	}
 
 	/**
-	 * Add one or more components to be invoked after the execution of a controller
+	 * Add one or more components to translate of a controller
 	 * method annotated with {@code @ResponseBody} or returning {@code ResponseEntity}
 	 * but before the body is written to the response with the selected
 	 * {@code HttpMessageConverter}.

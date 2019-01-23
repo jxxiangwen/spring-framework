@@ -51,6 +51,7 @@ public interface TransactionDefinition {
 	 * <p>This is typically the default setting of a transaction definition,
 	 * and typically defines a transaction synchronization scope.
 	 */
+	// 如果当前存在事务就加入，不存在就新建一个事务
 	int PROPAGATION_REQUIRED = 0;
 
 	/**
@@ -72,6 +73,7 @@ public interface TransactionDefinition {
 	 * @see org.springframework.transaction.support.AbstractPlatformTransactionManager#setTransactionSynchronization
 	 * @see org.springframework.transaction.support.AbstractPlatformTransactionManager#SYNCHRONIZATION_ON_ACTUAL_TRANSACTION
 	 */
+	// 如果当前存在事务就加入，不存在就直接执行
 	int PROPAGATION_SUPPORTS = 1;
 
 	/**
@@ -80,6 +82,7 @@ public interface TransactionDefinition {
 	 * <p>Note that transaction synchronization within a {@code PROPAGATION_MANDATORY}
 	 * scope will always be driven by the surrounding transaction.
 	 */
+	// 如果当前存在事务就加入，不存在就抛出异常,也就是说调用到响应方法必须存在事务
 	int PROPAGATION_MANDATORY = 2;
 
 	/**
@@ -95,6 +98,7 @@ public interface TransactionDefinition {
 	 * and resumed appropriately.
 	 * @see org.springframework.transaction.jta.JtaTransactionManager#setTransactionManager
 	 */
+	// 创建一个新的事务，如果当前存在事务就挂起
 	int PROPAGATION_REQUIRES_NEW = 3;
 
 	/**
@@ -110,6 +114,7 @@ public interface TransactionDefinition {
 	 * will be suspended and resumed appropriately.
 	 * @see org.springframework.transaction.jta.JtaTransactionManager#setTransactionManager
 	 */
+	// 不支持当前事务，如果当前存在事务事务会挂起
 	int PROPAGATION_NOT_SUPPORTED = 4;
 
 	/**
@@ -118,6 +123,7 @@ public interface TransactionDefinition {
 	 * <p>Note that transaction synchronization is <i>not</i> available within a
 	 * {@code PROPAGATION_NEVER} scope.
 	 */
+	// 不支持当前事务，如果当前存在事务抛出异常
 	int PROPAGATION_NEVER = 5;
 
 	/**
@@ -131,6 +137,7 @@ public interface TransactionDefinition {
 	 * nested transactions as well.
 	 * @see org.springframework.jdbc.datasource.DataSourceTransactionManager
 	 */
+	// 如果当前存在事务就创建一个嵌套事务执行，如果当前不存在事务就创建一个事务执行
 	int PROPAGATION_NESTED = 6;
 
 
@@ -139,6 +146,7 @@ public interface TransactionDefinition {
 	 * All other levels correspond to the JDBC isolation levels.
 	 * @see java.sql.Connection
 	 */
+	// 默认隔离级别
 	int ISOLATION_DEFAULT = -1;
 
 	/**
@@ -150,6 +158,7 @@ public interface TransactionDefinition {
 	 * retrieved an invalid row.
 	 * @see java.sql.Connection#TRANSACTION_READ_UNCOMMITTED
 	 */
+	// 读未提交
 	int ISOLATION_READ_UNCOMMITTED = Connection.TRANSACTION_READ_UNCOMMITTED;
 
 	/**
@@ -159,6 +168,7 @@ public interface TransactionDefinition {
 	 * with uncommitted changes in it.
 	 * @see java.sql.Connection#TRANSACTION_READ_COMMITTED
 	 */
+	// 读已提交
 	int ISOLATION_READ_COMMITTED = Connection.TRANSACTION_READ_COMMITTED;
 
 	/**
@@ -170,6 +180,7 @@ public interface TransactionDefinition {
 	 * getting different values the second time (a "non-repeatable read").
 	 * @see java.sql.Connection#TRANSACTION_REPEATABLE_READ
 	 */
+	// 可重复读
 	int ISOLATION_REPEATABLE_READ = Connection.TRANSACTION_REPEATABLE_READ;
 
 	/**
@@ -183,6 +194,7 @@ public interface TransactionDefinition {
 	 * in the second read.
 	 * @see java.sql.Connection#TRANSACTION_SERIALIZABLE
 	 */
+	// 序列化
 	int ISOLATION_SERIALIZABLE = Connection.TRANSACTION_SERIALIZABLE;
 
 
@@ -190,6 +202,7 @@ public interface TransactionDefinition {
 	 * Use the default timeout of the underlying transaction system,
 	 * or none if timeouts are not supported.
 	 */
+	// 使用默认超时时间
 	int TIMEOUT_DEFAULT = -1;
 
 

@@ -193,7 +193,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	/** Reference to the JVM shutdown hook, if registered. */
 	@Nullable
 	private Thread shutdownHook;
-
+	// 资源解析器，默认使用PathMatchingResourcePatternResolver
 	/** ResourcePatternResolver used by this context. */
 	private ResourcePatternResolver resourcePatternResolver;
 
@@ -512,6 +512,7 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 	public void refresh() throws BeansException, IllegalStateException {
 		synchronized (this.startupShutdownMonitor) {
 			// Prepare this context for refreshing.
+			// 设置开始时间，激活标志，和一些property source的初始化
 			prepareRefresh();
 
 			// Tell the subclass to refresh the internal bean factory.
@@ -523,22 +524,23 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 			try {
 				// Allows post-processing of the bean factory in context subclasses.
 				postProcessBeanFactory(beanFactory);
-
+				// 执行实现了BeanDefinitionRegistryPostProcessor和BeanFactoryPostProcessor的对象
+				// 也会对这些对象排序
 				// Invoke factory processors registered as beans in the context.
 				invokeBeanFactoryPostProcessors(beanFactory);
-
+				// 重新注册BeanPostProcessor对象，做了排序
 				// Register bean processors that intercept bean creation.
 				registerBeanPostProcessors(beanFactory);
-
+				// 用于国际化
 				// Initialize message source for this context.
 				initMessageSource();
-
+				// 用于事件发布
 				// Initialize event multicaster for this context.
 				initApplicationEventMulticaster();
-
+				// 模板方法
 				// Initialize other special beans in specific context subclasses.
 				onRefresh();
-
+				// 注册监听器
 				// Check for listener beans and register them.
 				registerListeners();
 
@@ -855,10 +857,10 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader
 
 		// Stop using the temporary ClassLoader for type matching.
 		beanFactory.setTempClassLoader(null);
-
+		// 可以缓存BeanDefinition了，后续不会再变
 		// Allow for caching all bean definition metadata, not expecting further changes.
 		beanFactory.freezeConfiguration();
-
+		// 实例化所有非延迟加载的单例
 		// Instantiate all remaining (non-lazy-init) singletons.
 		beanFactory.preInstantiateSingletons();
 	}

@@ -80,6 +80,7 @@ public class AnnotationBeanNameGenerator implements BeanNameGenerator {
 	}
 
 	/**
+	 * 看是否通过component写了beanName
 	 * Derive a bean name from one of the annotations on the class.
 	 * @param annotatedDef the annotation-aware bean definition
 	 * @return the bean name, or {@code null} if none is found
@@ -90,7 +91,10 @@ public class AnnotationBeanNameGenerator implements BeanNameGenerator {
 		Set<String> types = amd.getAnnotationTypes();
 		String beanName = null;
 		for (String type : types) {
+			// 获取注解的属性
 			AnnotationAttributes attributes = AnnotationConfigUtils.attributesFor(amd, type);
+			// getMetaAnnotationTypes获取所有注解，包括继承的
+			// 看是否通过Component写了beanName
 			if (attributes != null && isStereotypeWithNameValue(type, amd.getMetaAnnotationTypes(type), attributes)) {
 				Object value = attributes.get("value");
 				if (value instanceof String) {
@@ -139,6 +143,7 @@ public class AnnotationBeanNameGenerator implements BeanNameGenerator {
 	}
 
 	/**
+	 * 默认beanName是类名称的首字母小写
 	 * Derive a default bean name from the given bean definition.
 	 * <p>The default implementation simply builds a decapitalized version
 	 * of the short class name: e.g. "mypackage.MyJdbcDao" -> "myJdbcDao".

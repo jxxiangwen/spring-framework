@@ -35,6 +35,7 @@ import org.springframework.util.ObjectUtils;
  * @author Rob Harrop
  * @author Juergen Hoeller
  */
+// 可以限制一个advise只有在某一个类或者某一个类的某一个方法中调用才执行
 @SuppressWarnings("serial")
 public class ControlFlowPointcut implements Pointcut, ClassFilter, MethodMatcher, Serializable {
 

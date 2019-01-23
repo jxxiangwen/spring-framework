@@ -63,6 +63,9 @@ public class AutoProxyRegistrar implements ImportBeanDefinitionRegistrar {
 			if (candidate == null) {
 				continue;
 			}
+			// springboot中如果在main函数所在的Application类中加了EnableTransactionManagement注解
+			// 下面这个判断就会成立，默认情况下mode是proxy,就会使用AopConfigUtils
+			// 将InfrastructureAdvisorAutoProxyCreator加入spring容器
 			Object mode = candidate.get("mode");
 			Object proxyTargetClass = candidate.get("proxyTargetClass");
 			if (mode != null && proxyTargetClass != null && AdviceMode.class == mode.getClass() &&

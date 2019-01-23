@@ -167,6 +167,13 @@ public class SQLErrorCodeSQLExceptionTranslator extends AbstractFallbackSQLExcep
 	}
 
 
+	/**
+	 * 将sql异常转换为spring定义的统一异常
+	 * @param task readable text describing the task being attempted
+	 * @param sql the SQL query or update that caused the problem (if known)
+	 * @param ex the offending {@code SQLException}
+	 * @return
+	 */
 	@Override
 	@Nullable
 	protected DataAccessException doTranslate(String task, @Nullable String sql, SQLException ex) {
@@ -228,6 +235,7 @@ public class SQLErrorCodeSQLExceptionTranslator extends AbstractFallbackSQLExcep
 						}
 					}
 				}
+				// 全都是用二分查找来查找，在sql-error-codes.xml中定义的code要排序
 				// Next, look for grouped error codes.
 				if (Arrays.binarySearch(this.sqlErrorCodes.getBadSqlGrammarCodes(), errorCode) >= 0) {
 					logTranslation(task, sql, sqlEx, false);

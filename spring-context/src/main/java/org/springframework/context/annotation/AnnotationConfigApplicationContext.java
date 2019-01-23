@@ -72,7 +72,9 @@ public class AnnotationConfigApplicationContext extends GenericApplicationContex
 	 */
 	public AnnotationConfigApplicationContext(DefaultListableBeanFactory beanFactory) {
 		super(beanFactory);
+		// 注解处理
 		this.reader = new AnnotatedBeanDefinitionReader(this);
+		// classpath处理
 		this.scanner = new ClassPathBeanDefinitionScanner(this);
 	}
 

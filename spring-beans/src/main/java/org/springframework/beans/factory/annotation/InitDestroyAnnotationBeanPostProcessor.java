@@ -125,6 +125,7 @@ public class InitDestroyAnnotationBeanPostProcessor
 
 	@Override
 	public void postProcessMergedBeanDefinition(RootBeanDefinition beanDefinition, Class<?> beanType, String beanName) {
+		// 获取这个类带有类加了PostConstruct和PreDestroy的方法的信息
 		LifecycleMetadata metadata = findLifecycleMetadata(beanType);
 		metadata.checkConfigMembers(beanDefinition);
 	}
@@ -219,7 +220,7 @@ public class InitDestroyAnnotationBeanPostProcessor
 					}
 				}
 			});
-
+			// 这样添加就可以保证初始化的时候先初始化父类的方法，销毁的时候先销毁子类的方法
 			initMethods.addAll(0, currInitMethods);
 			destroyMethods.addAll(currDestroyMethods);
 			targetClass = targetClass.getSuperclass();
@@ -245,6 +246,7 @@ public class InitDestroyAnnotationBeanPostProcessor
 
 	/**
 	 * Class representing information about annotated init and destroy methods.
+	 * 保存一个类加了PostConstruct和PreDestroy的方法
 	 */
 	private class LifecycleMetadata {
 

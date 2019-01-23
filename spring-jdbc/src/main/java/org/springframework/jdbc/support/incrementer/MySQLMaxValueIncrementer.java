@@ -109,6 +109,7 @@ public class MySQLMaxValueIncrementer extends AbstractColumnMaxValueIncrementer 
 
 	@Override
 	protected synchronized long getNextKey() throws DataAccessException {
+		// 如果相等代表缓存的id已经用完了
 		if (this.maxId == this.nextId) {
 			/*
 			* If useNewConnection is true, then we obtain a non-managed connection so our modifications

@@ -147,6 +147,7 @@ public abstract class TransactionSynchronizationManager {
 
 	/**
 	 * Actually check the value of the resource that is bound for the given key.
+	 * 通过actualKey获取绑定到线程ThreadLocal中的对象
 	 */
 	@Nullable
 	private static Object doGetResource(Object actualKey) {

@@ -108,6 +108,7 @@ public abstract class AbstractFallbackTransactionAttributeSource implements Tran
 			}
 		}
 		else {
+			// 通过这里计算是否存在Transaction注解，其他代理是在做缓存，避免重复计算
 			// We need to work it out.
 			TransactionAttribute txAttr = computeTransactionAttribute(method, targetClass);
 			// Put it in the cache.

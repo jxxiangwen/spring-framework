@@ -122,6 +122,11 @@ public final class SpringFactoriesLoader {
 		return loadSpringFactories(classLoader).getOrDefault(factoryClassName, Collections.emptyList());
 	}
 
+	/**
+	 * 获取META-INF/spring.factories中接口和响应的实现类
+	 * @param classLoader 类加载器
+	 * @return map  key是接口，value是实现了接口的类
+	 */
 	private static Map<String, List<String>> loadSpringFactories(@Nullable ClassLoader classLoader) {
 		MultiValueMap<String, String> result = cache.get(classLoader);
 		if (result != null) {

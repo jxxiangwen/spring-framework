@@ -324,6 +324,7 @@ public class JdbcTemplate extends JdbcAccessor implements JdbcOperations {
 		Connection con = DataSourceUtils.getConnection(obtainDataSource());
 		try {
 			// Create close-suppressing Connection proxy, also preparing returned Statements.
+			// 创建代理，如果调用conn的返回值是Statement，会应用一些设置,比如FetchSize，超时时间等等
 			Connection conToUse = createConnectionProxy(con);
 			return action.doInConnection(conToUse);
 		}

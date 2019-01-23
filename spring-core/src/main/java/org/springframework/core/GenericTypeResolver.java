@@ -108,10 +108,13 @@ public final class GenericTypeResolver {
 	 */
 	@Nullable
 	public static Class<?> resolveTypeArgument(Class<?> clazz, Class<?> genericIfc) {
+		// 查看clazz是否实现了genericIfc的泛型接口，比如class = A.class implement B<C>
+		// 此时clazz = A  genericIfc = B，这个功能会返回B<C>的封装类
 		ResolvableType resolvableType = ResolvableType.forClass(clazz).as(genericIfc);
 		if (!resolvableType.hasGenerics()) {
 			return null;
 		}
+		// 此时如果有泛型就会返回泛型
 		return getSingleGeneric(resolvableType);
 	}
 

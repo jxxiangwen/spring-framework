@@ -381,6 +381,7 @@ public class HibernateTemplate implements HibernateOperations, InitializingBean 
 			enableFilters(session);
 			Session sessionToExpose =
 					(enforceNativeSession || isExposeNativeSession() ? session : createSessionProxy(session));
+			// 这一步是真正的执行，其他是资源管理
 			return action.doInHibernate(sessionToExpose);
 		}
 		catch (HibernateException ex) {

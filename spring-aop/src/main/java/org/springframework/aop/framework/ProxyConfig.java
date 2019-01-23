@@ -39,7 +39,7 @@ public class ProxyConfig implements Serializable {
 	private boolean optimize = false;
 
 	boolean opaque = false;
-
+	// 如果exposeProxy为true，将proxy设置到threadLocal
 	boolean exposeProxy = false;
 
 	private boolean frozen = false;

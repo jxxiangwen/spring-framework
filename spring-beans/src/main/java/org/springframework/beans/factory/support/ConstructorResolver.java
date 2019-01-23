@@ -383,6 +383,7 @@ class ConstructorResolver {
 		Class<?> factoryClass;
 		boolean isStatic;
 
+		// 获取工厂类，比如使用Configuration注解，里面如果有Bean注解，那么这些Bean的工厂Bean就是
 		String factoryBeanName = mbd.getFactoryBeanName();
 		if (factoryBeanName != null) {
 			if (factoryBeanName.equals(beanName)) {
@@ -393,6 +394,7 @@ class ConstructorResolver {
 			if (mbd.isSingleton() && this.beanFactory.containsSingleton(beanName)) {
 				throw new ImplicitlyAppearedSingletonException();
 			}
+			// 存在工厂类那么factoryClass就是工厂类
 			factoryClass = factoryBean.getClass();
 			isStatic = false;
 		}
@@ -403,6 +405,7 @@ class ConstructorResolver {
 						"bean definition declares neither a bean class nor a factory-bean reference");
 			}
 			factoryBean = null;
+			// 不存在工厂类那么factoryClass就是自己
 			factoryClass = mbd.getBeanClass();
 			isStatic = true;
 		}
@@ -434,11 +437,14 @@ class ConstructorResolver {
 		if (factoryMethodToUse == null || argsToUse == null) {
 			// Need to determine the factory method...
 			// Try all methods with this name to see if they match the given arguments.
+			// 如果类是被cglib加工过的class，会返回原始class
 			factoryClass = ClassUtils.getUserClass(factoryClass);
 
 			Method[] rawCandidates = getCandidateMethods(factoryClass, mbd);
 			List<Method> candidateList = new ArrayList<>();
 			for (Method candidate : rawCandidates) {
+				// 获取候选工厂方法，如果是Bean注解，那么生成的BeanDefinition是ConfigurationClassBeanDefinition，他的isFactoryMethod
+				// 会判断方法的名字是否匹配以及是否有Bean注解
 				if (Modifier.isStatic(candidate.getModifiers()) == isStatic && mbd.isFactoryMethod(candidate)) {
 					candidateList.add(candidate);
 				}
@@ -502,6 +508,7 @@ class ConstructorResolver {
 						// Resolved constructor arguments: type conversion and/or autowiring necessary.
 						try {
 							String[] paramNames = null;
+							// 获取参数解析
 							ParameterNameDiscoverer pnd = this.beanFactory.getParameterNameDiscoverer();
 							if (pnd != null) {
 								paramNames = pnd.getParameterNames(candidate);
@@ -522,6 +529,7 @@ class ConstructorResolver {
 						}
 					}
 
+					// 计算参数匹配度
 					int typeDiffWeight = (mbd.isLenientConstructorResolution() ?
 							argsHolder.getTypeDifferenceWeight(paramTypes) : argsHolder.getAssignabilityWeight(paramTypes));
 					// Choose this factory method if it represents the closest match.
@@ -604,6 +612,7 @@ class ConstructorResolver {
 		}
 
 		Assert.state(argsToUse != null, "Unresolved factory method arguments");
+		// 实例化
 		bw.setBeanInstance(instantiate(beanName, mbd, factoryBean, factoryMethodToUse, argsToUse));
 		return bw;
 	}

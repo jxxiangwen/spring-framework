@@ -250,6 +250,7 @@ public class DataSourceTransactionManager extends AbstractPlatformTransactionMan
 
 	/**
 	 * This implementation sets the isolation level but ignores the timeout.
+	 * 如果需要获取新的连接，设置隔离级别，超时时间，只读状态，如果是新连接绑定连接到当前线程
 	 */
 	@Override
 	protected void doBegin(Object transaction, TransactionDefinition definition) {
@@ -259,16 +260,21 @@ public class DataSourceTransactionManager extends AbstractPlatformTransactionMan
 		try {
 			if (!txObject.hasConnectionHolder() ||
 					txObject.getConnectionHolder().isSynchronizedWithTransaction()) {
+				// 获取新连接
 				Connection newCon = obtainDataSource().getConnection();
 				if (logger.isDebugEnabled()) {
 					logger.debug("Acquired Connection [" + newCon + "] for JDBC transaction");
 				}
+				// 保存
 				txObject.setConnectionHolder(new ConnectionHolder(newCon), true);
 			}
 
+			// 设置开始同步
 			txObject.getConnectionHolder().setSynchronizedWithTransaction(true);
 			con = txObject.getConnectionHolder().getConnection();
-
+			// 获取上一个事务的隔离级别并保存起来，事务的隔离级别在suspend的时候会保存在SuspendedResourcesHolder
+			// 这里保存的是DataSourceUtils中的隔离级别，两者不一样
+			// 同时这里也会根据事务定义设置连接的状态，比如只读，隔离级别等等，只有definition的隔离级别和conn的不同才会返回
 			Integer previousIsolationLevel = DataSourceUtils.prepareConnectionForTransaction(con, definition);
 			txObject.setPreviousIsolationLevel(previousIsolationLevel);
 
@@ -276,14 +282,16 @@ public class DataSourceTransactionManager extends AbstractPlatformTransactionMan
 			// so we don't want to do it unnecessarily (for example if we've explicitly
 			// configured the connection pool to set it already).
 			if (con.getAutoCommit()) {
+				// 记录下来之前是自动提交，后面需要还原
 				txObject.setMustRestoreAutoCommit(true);
 				if (logger.isDebugEnabled()) {
 					logger.debug("Switching JDBC Connection [" + con + "] to manual commit");
 				}
 				con.setAutoCommit(false);
 			}
-
+			// 如果DataSourceTransactionManager设置了强制readonly，执行SET TRANSACTION READ ONLY
 			prepareTransactionalConnection(con, definition);
+			// 设置事务为激活
 			txObject.getConnectionHolder().setTransactionActive(true);
 
 			int timeout = determineTimeout(definition);
@@ -291,6 +299,7 @@ public class DataSourceTransactionManager extends AbstractPlatformTransactionMan
 				txObject.getConnectionHolder().setTimeoutInSeconds(timeout);
 			}
 
+			// 如果是新的连接，将连接绑定到当前线程
 			// Bind the connection holder to the thread.
 			if (txObject.isNewConnectionHolder()) {
 				TransactionSynchronizationManager.bindResource(obtainDataSource(), txObject.getConnectionHolder());
@@ -306,6 +315,11 @@ public class DataSourceTransactionManager extends AbstractPlatformTransactionMan
 		}
 	}
 
+	/**
+	 * 取消连接和线程的绑定
+	 * @param transaction transaction object returned by {@code doGetTransaction}
+	 * @return
+	 */
 	@Override
 	protected Object doSuspend(Object transaction) {
 		DataSourceTransactionObject txObject = (DataSourceTransactionObject) transaction;
@@ -363,6 +377,7 @@ public class DataSourceTransactionManager extends AbstractPlatformTransactionMan
 		DataSourceTransactionObject txObject = (DataSourceTransactionObject) transaction;
 
 		// Remove the connection holder from the thread, if exposed.
+		// 从threadLocal移除datasource
 		if (txObject.isNewConnectionHolder()) {
 			TransactionSynchronizationManager.unbindResource(obtainDataSource());
 		}
@@ -370,9 +385,11 @@ public class DataSourceTransactionManager extends AbstractPlatformTransactionMan
 		// Reset connection.
 		Connection con = txObject.getConnectionHolder().getConnection();
 		try {
+			// 如果需要恢复autoCommit
 			if (txObject.isMustRestoreAutoCommit()) {
 				con.setAutoCommit(true);
 			}
+			// 重置连接的readOnly和隔离级别
 			DataSourceUtils.resetConnectionAfterTransaction(con, txObject.getPreviousIsolationLevel());
 		}
 		catch (Throwable ex) {
@@ -383,9 +400,10 @@ public class DataSourceTransactionManager extends AbstractPlatformTransactionMan
 			if (logger.isDebugEnabled()) {
 				logger.debug("Releasing JDBC Connection [" + con + "] after transaction");
 			}
+			// 新连接就释放连接
 			DataSourceUtils.releaseConnection(con, this.dataSource);
 		}
-
+		// 清除状态，包括transactionActive和savepoint等等
 		txObject.getConnectionHolder().clear();
 	}
 

@@ -151,6 +151,7 @@ public class RequiredAnnotationBeanPostProcessor extends InstantiationAwareBeanP
 				List<String> invalidProperties = new ArrayList<>();
 				for (PropertyDescriptor pd : pds) {
 					if (isRequiredProperty(pd) && !pvs.contains(pd.getName())) {
+						// 如果存在require，但是有没有相应的property，就是非法的
 						invalidProperties.add(pd.getName());
 					}
 				}
